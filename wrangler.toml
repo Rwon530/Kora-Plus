@@ -1,6 +1,6 @@
 name = "kora-plus"
 main = "worker.js"
-compatibility_date = "2026-08-20"
+compatibility_date = "2026-08-07"
 
 [assets]
 directory = "."
