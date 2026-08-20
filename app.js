@@ -1,377 +1,384 @@
-import { api } from "./api.js";
-
-const $ = (s, root=document) => root.querySelector(s);
-const $$ = (s, root=document) => [...root.querySelectorAll(s)];
-const main = $("#main");
-const toast = $("#toast");
-
-const state = {
-  route: location.hash.replace("#","") || "home",
-  selectedDate: localISODate(),
-  matchTab: "summary",
-  match: null,
-  matches: [],
-  leagues: [],
-  liveTimer: null
+/* ---------------- i18n ---------------- */
+const DICT = {
+  ar: {
+    brand: "كورة لايف",
+    eyebrow_hero: "لوحة النتائج المباشرة",
+    hero_title: "نتائج مباريات كرة القدم، لحظة بلحظة.",
+    hero_desc: "تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي موثوق.",
+    hero_stat_label: "مباراة اليوم",
+    live_now: "مباراة مباشرة الآن",
+    date_label: "التاريخ",
+    today: "اليوم",
+    search_placeholder: "ابحث عن فريق...",
+    section_eyebrow: "مركز المباريات",
+    section_title: "مباريات اليوم",
+    filter_all: "الكل",
+    filter_live: "مباشر",
+    filter_scheduled: "لم تبدأ",
+    filter_finished: "انتهت",
+    state_loading: "جاري تحميل المباريات...",
+    state_empty: "لا توجد مباريات مطابقة لهذا البحث أو الفلتر.",
+    state_empty_favorites: "مفيش بطولات مفضلة لسه. دوس على ⭐ جنب أي بطولة عشان تضيفها.",
+    scope_all: "الكل",
+    scope_favorites: "المفضلة",
+    scope_top: "أهم المباريات",
+    state_error: "تعذّر تحميل المباريات، حاول مرة أخرى.",
+    status_live: "مباشر",
+    status_finished: "انتهت",
+    venue_label: "الملعب",
+    referee_label: "الحكم",
+    footer_tag: "منصة نتائج مباريات كرة القدم مباشرة",
+    theme_toggle: "تبديل المظهر",
+    lang_toggle: "English",
+    league_fallback: "بطولة",
+    team_fallback: "الفريق",
+  },
+  en: {
+    brand: "Kora Live",
+    eyebrow_hero: "LIVE SCOREBOARD",
+    hero_title: "Football scores, live.",
+    hero_desc: "Follow today's fixtures and live scores from a trusted sports data source.",
+    hero_stat_label: "matches today",
+    live_now: "matches live now",
+    date_label: "Date",
+    today: "Today",
+    search_placeholder: "Search a team...",
+    section_eyebrow: "MATCH CENTER",
+    section_title: "Today's Fixtures",
+    filter_all: "All",
+    filter_live: "Live",
+    filter_scheduled: "Upcoming",
+    filter_finished: "Finished",
+    state_loading: "Loading fixtures…",
+    state_empty: "No matches for this search or filter.",
+    state_empty_favorites: "No favorite leagues yet. Tap ⭐ next to a league to add it.",
+    scope_all: "All",
+    scope_favorites: "Favorites",
+    scope_top: "Top matches",
+    state_error: "Couldn't load fixtures, please try again.",
+    status_live: "LIVE",
+    status_finished: "FT",
+    venue_label: "Venue",
+    referee_label: "Referee",
+    footer_tag: "Live football scores platform",
+    theme_toggle: "Toggle theme",
+    lang_toggle: "العربية",
+    league_fallback: "League",
+    team_fallback: "Team",
+  }
 };
 
-function localISODate(date = new Date()) {
-  const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return d.toISOString().slice(0,10);
-}
-function esc(v="") {
-  return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-}
-function logo(url, alt="") {
-  return url ? `<img class="team-logo" src="${esc(url)}" alt="${esc(alt)}" loading="lazy">` : `<div class="team-logo"></div>`;
-}
-function fmtTime(date) {
-  try { return new Intl.DateTimeFormat("ar-EG",{hour:"2-digit",minute:"2-digit"}).format(new Date(date)); }
-  catch { return "--:--"; }
-}
-function statusClass(short) {
-  if (["1H","2H","ET","P","BT","HT"].includes(short)) return "live";
-  if (["FT","AET","PEN"].includes(short)) return "done";
-  return "";
-}
-function statusText(f) {
-  const s = f?.fixture?.status;
-  if (!s) return "غير معروف";
-  if (s.short === "NS") return fmtTime(f.fixture.date);
-  if (s.short === "1H" || s.short === "2H") return `${s.elapsed ?? ""}'`;
-  return s.long || s.short;
-}
-function isLive(f) { return ["1H","2H","ET","P","BT","HT"].includes(f?.fixture?.status?.short); }
+const TOP_LEAGUE_IDS = [
+  2, 3, 848,       // UEFA Champions League, Europa League, Conference League
+  39, 40,          // Premier League, Championship
+  140, 141,        // La Liga, La Liga 2
+  135, 136,        // Serie A, Serie B
+  78, 79,          // Bundesliga, 2. Bundesliga
+  61, 62,          // Ligue 1, Ligue 2
+  88, 94, 203,     // Eredivisie, Primeira Liga, Super Lig
+  307,             // Saudi Pro League
+  233,             // Egyptian Premier League
+  1, 4, 9, 32      // World Cup, Euro, Copa America, World Cup Qualifiers
+];
 
-function setActiveNav() {
-  $$("[data-route]").forEach(a => a.classList.toggle("active", a.dataset.route === state.route));
+const state = {
+  lang: localStorage.getItem("lang") || "ar",
+  date: localDate(),
+  filter: "all",
+  scope: "all",
+  query: "",
+  matches: [],
+  favLeagues: JSON.parse(localStorage.getItem("favLeagues") || "[]")
+};
+
+function t(key) {
+  return DICT[state.lang][key] || DICT.ar[key] || key;
 }
 
-function skeleton(count=4) {
-  return `<div class="grid grid-4">${Array.from({length:count},()=>`<div class="card skeleton skel-card"></div>`).join("")}</div>`;
-}
-function empty(msg="لا توجد بيانات متاحة حاليًا") {
-  return `<div class="card empty">${esc(msg)}</div>`;
-}
-function errorBox(err) {
-  let msg = err?.status === 429 ? "تم الوصول إلى حد طلبات API. حاول بعد قليل."
-    : /Network/i.test(err?.message||"") ? "تعذر الاتصال بالخادم. تحقق من الشبكة."
-    : err?.message || "حدث خطأ غير متوقع.";
-  return `<div class="card empty error"><strong>تعذر تحميل البيانات</strong><p>${esc(msg)}</p><button class="tab" onclick="location.reload()">إعادة المحاولة</button></div>`;
-}
-function showToast(msg) {
-  toast.textContent = msg; toast.classList.add("show");
-  setTimeout(()=>toast.classList.remove("show"),2400);
+function applyLang() {
+  const dir = state.lang === "ar" ? "rtl" : "ltr";
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = dir;
+  document.title = state.lang === "ar"
+    ? "كورة لايف | نتائج مباريات كرة القدم"
+    : "Kora Live | Football Scores";
+
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-aria]").forEach(el => {
+    el.setAttribute("aria-label", t(el.dataset.i18nAria));
+  });
+
+  document.getElementById("selectedDate").textContent = formatDate(state.date);
 }
 
-function matchCard(f) {
-  const h=f.teams?.home||{}, a=f.teams?.away||{}, g=f.goals||{};
-  return `<article class="card match-card" data-match="${f.fixture.id}">
-    <div class="match-meta"><span>${esc(f.league?.name||"بطولة")}</span><span class="status ${statusClass(f.fixture.status?.short)}">${esc(statusText(f))}</span></div>
-    <div class="match-teams">
-      <div>${logo(h.logo,h.name)}<div class="team-name">${esc(h.name)}</div></div>
-      <div><div class="match-score">${g.home ?? "-"} : ${g.away ?? "-"}</div><div class="small-muted">${esc(f.fixture.status?.short||"")}</div></div>
-      <div>${logo(a.logo,a.name)}<div class="team-name">${esc(a.name)}</div></div>
-    </div>
-  </article>`;
-}
-function bindMatchCards(root=document) {
-  $$(".match-card",root).forEach(c => c.addEventListener("click",()=>navigate(`match/${c.dataset.match}`)));
+/* ---------------- Date helpers ---------------- */
+function localDate(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(d);
+  const get = t => parts.find(x => x.type === t).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-async function renderHome() {
-  main.innerHTML = `<section class="hero">
-    <div class="hero-grid">
-      <div><div class="small-muted" style="color:#a8cfff">منصة كرة القدم</div><h1>كل المباريات في مكان واحد</h1>
-      <p>نتائج مباشرة، تفاصيل المباريات، التشكيلات، الإحصائيات والترتيب — ببيانات حقيقية من مزود الـAPI.</p>
-      <a class="tab" style="display:inline-block;background:white;color:#0b4eb4;border:0" href="#matches">عرض مباريات اليوم</a></div>
-      <div id="featured" class="featured">${skeleton(1)}</div>
-    </div>
-  </section>
-  <div class="section"><div class="ad-slot">مساحة إعلانية — أعلى الصفحة</div></div>
-  <section class="section"><div class="section-head"><h2>مباريات مباشرة</h2><a class="link" href="#matches">كل المباريات</a></div><div id="liveHome">${skeleton()}</div></section>
-  <section class="section"><div class="section-head"><h2>مباريات اليوم</h2><a class="link" href="#matches">التفاصيل</a></div><div id="todayHome">${skeleton()}</div></section>`;
+function shiftDate(date, days) {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDate(date) {
+  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+function formatTime(iso) {
+  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit"
+  }).format(new Date(iso));
+}
+
+/* ---------------- Utils ---------------- */
+function esc(s = "") {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[c]));
+}
+
+function statusType(s) {
+  const live = ["1H", "2H", "ET", "BT", "P", "LIVE", "HT"];
+  const finished = ["FT", "AET", "PEN", "AWD", "WO", "CANC", "ABD"];
+  if (live.includes(s)) return "live";
+  if (finished.includes(s)) return "finished";
+  return "scheduled";
+}
+
+function statusLabel(m) {
+  const type = statusType(m.status.short);
+  if (type === "live") return `● ${m.status.elapsed ? m.status.elapsed + "'" : t("status_live")}`;
+  if (type === "finished") return t("status_finished");
+  return formatTime(m.date);
+}
+
+/* ---------------- Data loading ---------------- */
+let apiClientPromise;
+function getApiClient() {
+  return apiClientPromise || (apiClientPromise = import("./api.js").then(m => m.api));
+}
+
+async function loadMatches(options = {}) {
+  const stateEl = document.getElementById("state");
+  const hadMatches = state.matches.length > 0;
+  const requestedDate = state.date;
+
+  // Do not clear the existing cards while refreshing.
+  if (!hadMatches) {
+    stateEl.textContent = t("state_loading");
+    stateEl.style.display = "block";
+  }
 
   try {
-    const live = await api.getLiveMatches();
-    const today = await api.getFixtures({date:state.selectedDate});
-    const liveList = live?.response || [];
-    const todayList = today?.response || [];
-    $("#liveHome").innerHTML = liveList.length ? `<div class="grid grid-4">${liveList.slice(0,8).map(matchCard).join("")}</div>` : empty("لا توجد مباريات مباشرة حاليًا");
-    $("#todayHome").innerHTML = todayList.length ? `<div class="grid grid-4">${todayList.slice(0,8).map(matchCard).join("")}</div>` : empty();
-    const featured = liveList[0] || todayList[0];
-    $("#featured").innerHTML = featured ? `<div class="small-muted" style="color:#dcecff">${esc(featured.league?.name||"أبرز مباراة")}</div>
-      <div class="featured-teams" style="margin-top:14px">
-        <div>${logo(featured.teams.home.logo,featured.teams.home.name)}<div>${esc(featured.teams.home.name)}</div></div>
-        <div><div class="score-big">${featured.goals.home ?? "-"} : ${featured.goals.away ?? "-"}</div><span class="status ${statusClass(featured.fixture.status.short)}">${esc(statusText(featured))}</span></div>
-        <div>${logo(featured.teams.away.logo,featured.teams.away.name)}<div>${esc(featured.teams.away.name)}</div></div>
-      </div>` : empty("لا توجد مباراة بارزة حاليًا");
-    bindMatchCards(main);
-    startLiveRefresh();
-  } catch(e) {
-    $("#liveHome").innerHTML=errorBox(e); $("#todayHome").innerHTML="";
-    $("#featured").innerHTML=empty("لا توجد بيانات متاحة حاليًا");
+    const api = await getApiClient();
+    const data = await api.getFixtures({ date: requestedDate }, { force: options.force === true });
+    const freshMatches = Array.isArray(data?.response)
+      ? data.response
+      : Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+    // A temporary empty response must not erase already displayed data
+    // during an automatic refresh of the same date.
+    if (freshMatches.length === 0 && hadMatches && requestedDate === state.date && !options.allowEmptyReplace) {
+      stateEl.style.display = "none";
+      return;
+    }
+
+    state.matches = freshMatches;
+    document.getElementById("selectedDate").textContent = formatDate(state.date);
+    document.getElementById("matchCount").textContent = state.matches.length.toLocaleString("en-US");
+
+    const liveCount = state.matches.filter(m => statusType(m.status.short) === "live").length;
+    const liveBadge = document.getElementById("liveBadge");
+    if (liveBadge) {
+      liveBadge.hidden = liveCount === 0;
+      const liveCountEl = document.getElementById("liveCount");
+      if (liveCountEl) liveCountEl.textContent = liveCount.toLocaleString("en-US");
+    }
+
+    render();
+  } catch (e) {
+    // Keep the last successful state. api.js already falls back to its
+    // persistent cache, so this is only reached when no cached data exists.
+    if (hadMatches) {
+      stateEl.style.display = "none";
+      console.warn("Kora Plus: refresh failed; keeping previous matches", e);
+      return;
+    }
+    stateEl.textContent = e.message || t("state_error");
+    stateEl.style.display = "block";
   }
 }
 
-function startLiveRefresh() {
-  clearInterval(state.liveTimer);
-  state.liveTimer = setInterval(async ()=>{
-    if (state.route !== "home" && !state.route.startsWith("match/")) return;
-    try {
-      if (state.route === "home") {
-        const live = await api.getLiveMatches({}, {force:true});
-        const list = live?.response || [];
-        const box=$("#liveHome");
-        if(box) { box.innerHTML = list.length ? `<div class="grid grid-4">${list.slice(0,8).map(matchCard).join("")}</div>` : empty("لا توجد مباريات مباشرة حاليًا"); bindMatchCards(box); }
-      }
-    } catch {}
-  },15000);
-}
+/* ---------------- Render ---------------- */
+function render() {
+  const grid = document.getElementById("matchesGrid");
+  const stateEl = document.getElementById("state");
+  const q = state.query.trim().toLowerCase();
 
-async function renderMatches() {
-  main.innerHTML = `<div class="section-head"><h1 style="margin:0">المباريات</h1></div>
-    <div class="toolbar">
-      <button class="tab active" data-day="today">اليوم</button><button class="tab" data-day="yesterday">أمس</button><button class="tab" data-day="tomorrow">غدًا</button>
-      <input class="input" id="matchDate" type="date" value="${state.selectedDate}">
-      <select class="select" id="statusFilter"><option value="all">كل الحالات</option><option value="live">مباشر</option><option value="done">انتهت</option><option value="upcoming">قادمة</option></select>
-    </div>
-    <div class="ad-slot">مساحة إعلانية — بين أقسام المباريات</div>
-    <section class="section"><div id="matchesList">${skeleton()}</div></section>`;
-  const load = async () => {
-    const box=$("#matchesList"); box.innerHTML=skeleton();
-    try {
-      const data=await api.getFixtures({date:state.selectedDate});
-      state.matches=data?.response||[];
-      drawMatches();
-    } catch(e) { box.innerHTML=errorBox(e); }
-  };
-  const setDate = d => { state.selectedDate=localISODate(d); $("#matchDate").value=state.selectedDate; load(); };
-  $$("[data-day]").forEach(b=>b.onclick=()=>{
-    const n=b.dataset.day;
-    const d=new Date(); if(n==="yesterday") d.setDate(d.getDate()-1); if(n==="tomorrow") d.setDate(d.getDate()+1);
-    setDate(d); $$("[data-day]").forEach(x=>x.classList.toggle("active",x===b));
+  let list = state.matches.filter(m => {
+    const type = statusType(m.status.short);
+    const matchesFilter = state.filter === "all" || state.filter === type;
+    const matchesQuery = !q ||
+      (m.home.name || "").toLowerCase().includes(q) ||
+      (m.away.name || "").toLowerCase().includes(q);
+    const matchesScope =
+      state.scope === "all" ? true :
+      state.scope === "favorites" ? state.favLeagues.includes(m.league.id) :
+      state.scope === "top" ? TOP_LEAGUE_IDS.includes(m.league.id) : true;
+    return matchesFilter && matchesQuery && matchesScope;
   });
-  $("#matchDate").onchange=e=>setDate(new Date(`${e.target.value}T12:00:00`));
-  $("#statusFilter").onchange=drawMatches;
-  await load();
-}
-function drawMatches() {
-  const filter=$("#statusFilter")?.value||"all";
-  let list=state.matches;
-  if(filter==="live") list=list.filter(isLive);
-  if(filter==="done") list=list.filter(f=>["FT","AET","PEN"].includes(f.fixture.status.short));
-  if(filter==="upcoming") list=list.filter(f=>["NS","TBD"].includes(f.fixture.status.short));
-  $("#matchesList").innerHTML=list.length ? `<div class="grid grid-4">${list.map(matchCard).join("")}</div>` : empty();
-  bindMatchCards($("#matchesList"));
+
+  if (!list.length) {
+    grid.innerHTML = "";
+    stateEl.textContent = (state.scope === "favorites" && !state.favLeagues.length)
+      ? t("state_empty_favorites")
+      : t("state_empty");
+    stateEl.style.display = "block";
+    return;
+  }
+  stateEl.style.display = "none";
+
+  const groups = new Map();
+  for (const m of list) {
+    const key = `${m.league.id}-${m.league.name}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+
+  const sortedGroups = [...groups.values()].sort((a, b) => {
+    const aFav = state.favLeagues.includes(a[0].league.id) ? 0 : 1;
+    const bFav = state.favLeagues.includes(b[0].league.id) ? 0 : 1;
+    return aFav - bFav;
+  });
+
+  grid.innerHTML = sortedGroups.map(group => {
+    const league = group[0].league;
+    const isFav = state.favLeagues.includes(league.id);
+    return `
+      <article class="league-card">
+        <div class="league-head">
+          ${league.logo ? `<img src="${esc(league.logo)}" alt="" loading="lazy">` : ""}
+          <div class="league-names">
+            <strong>${esc(league.name || t("league_fallback"))}</strong>
+            <small>${esc(league.country || "")}</small>
+          </div>
+          <button class="fav-btn ${isFav ? "active" : ""}" data-league="${league.id}" aria-label="favorite">★</button>
+        </div>
+        ${group.map(matchRow).join("")}
+      </article>
+    `;
+  }).join("");
+
+  grid.querySelectorAll(".fav-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = Number(btn.dataset.league);
+      const idx = state.favLeagues.indexOf(id);
+      if (idx === -1) state.favLeagues.push(id); else state.favLeagues.splice(idx, 1);
+      localStorage.setItem("favLeagues", JSON.stringify(state.favLeagues));
+      render();
+    };
+  });
 }
 
-async function renderMatch(id) {
-  main.innerHTML=`<div id="matchPage">${skeleton(2)}</div>`;
-  try {
-    const d=await api.getMatchDetails(id);
-    const f=d?.response?.[0];
-    if(!f) { main.innerHTML=empty("المباراة غير موجودة"); return; }
-    state.match=f;
-    const h=f.teams.home,a=f.teams.away,g=f.goals||{};
-    main.innerHTML=`<section class="card match-header">
-      <div class="small-muted">${esc(f.league?.name||"")} · ${esc(f.fixture?.venue?.name||"الملعب غير متاح")}</div>
-      <div class="teams" style="margin-top:20px">
-        <div>${logo(h.logo,h.name)}<div class="team-title">${esc(h.name)}</div></div>
-        <div><div class="match-result">${g.home??"-"} : ${g.away??"-"}</div><div class="status ${statusClass(f.fixture.status.short)}">${esc(statusText(f))}</div><div class="match-info">${esc(new Date(f.fixture.date).toLocaleString("ar-EG"))}</div></div>
-        <div>${logo(a.logo,a.name)}<div class="team-title">${esc(a.name)}</div></div>
-      </div>
-    </section>
-    <div class="section tabs" id="matchTabs">
-      ${["summary","events","lineups","stats","standings","h2h","players","predictions"].map((x,i)=>`<button class="tab ${i===0?"active":""}" data-tab="${x}">${["ملخص","الأحداث","التشكيلة","الإحصائيات","الترتيب","المواجهات","اللاعبون","التوقعات"][i]}</button>`).join("")}
-    </div>
-    <div id="matchContent">${skeleton(2)}</div>`;
-    $$("#matchTabs .tab").forEach(b=>b.onclick=()=>{state.matchTab=b.dataset.tab;$$("#matchTabs .tab").forEach(x=>x.classList.toggle("active",x===b));loadMatchTab(id,b.dataset.tab);});
-    await loadMatchTab(id,"summary");
-    if(isLive(f)) startLiveRefresh();
-  } catch(e) { $("#matchPage").innerHTML=errorBox(e); }
+function matchRow(m) {
+  const type = statusType(m.status.short);
+  const homeLogo = m.home.logo ? `<img src="${esc(m.home.logo)}" alt="" loading="lazy">` : "";
+  const awayLogo = m.away.logo ? `<img src="${esc(m.away.logo)}" alt="" loading="lazy">` : "";
+
+  const score = m.goals.home == null && m.goals.away == null
+    ? "—"
+    : `${m.goals.home ?? 0} - ${m.goals.away ?? 0}`;
+
+  const details = [];
+  if (m.venue && m.venue.name) details.push(`<span><b>${t("venue_label")}</b>${esc(m.venue.name)}</span>`);
+  if (m.referee) details.push(`<span><b>${t("referee_label")}</b>${esc(m.referee)}</span>`);
+
+  return `
+    <details class="match" data-id="${m.id}">
+      <summary>
+        <div class="side home">
+          <span class="team-name">${esc(m.home.name || t("team_fallback"))}</span>
+          ${homeLogo}
+        </div>
+        <div class="score-box">
+          <span class="score">${score}</span>
+          <span class="status ${type}">${statusLabel(m)}</span>
+        </div>
+        <div class="side away">
+          ${awayLogo}
+          <span class="team-name">${esc(m.away.name || t("team_fallback"))}</span>
+        </div>
+      </summary>
+      ${details.length ? `<div class="match-detail">${details.join("")}</div>` : ""}
+    </details>
+  `;
 }
 
-async function loadMatchTab(id, tab) {
-  const box=$("#matchContent"); if(!box)return;
-  box.innerHTML=skeleton(2);
-  try {
-    if(tab==="summary") {
-      const [ev,st]=await Promise.allSettled([api.getMatchEvents(id),api.getMatchStatistics(id)]);
-      const events=ev.status==="fulfilled"?(ev.value?.response||[]):[];
-      const stats=st.status==="fulfilled"?(st.value?.response||[]):[];
-      box.innerHTML=`<div class="grid grid-2">
-        <div class="card"><h3>آخر الأحداث</h3>${events.length?eventHTML(events.slice(-8).reverse(),state.match):empty()}</div>
-        <div class="card"><h3>الإحصائيات</h3>${stats.length?statsHTML(stats):empty("لا توجد إحصائيات متاحة حاليًا")}</div>
-      </div>`;
-    } else if(tab==="events") {
-      const d=await api.getMatchEvents(id); box.innerHTML=`<div class="card"><h3>Timeline المباراة</h3>${d?.response?.length?eventHTML(d.response,state.match):empty()}</div>`;
-    } else if(tab==="lineups") {
-      const d=await api.getLineups(id); box.innerHTML=renderLineups(d?.response||[]);
-    } else if(tab==="stats") {
-      const d=await api.getMatchStatistics(id); box.innerHTML=`<div class="card"><h3>إحصائيات المباراة</h3>${d?.response?.length?statsHTML(d.response):empty("لا توجد إحصائيات متاحة حاليًا")}</div>`;
-    } else if(tab==="standings") {
-      const d=await api.getStandings(state.match.league.id,state.match.league.season);
-      box.innerHTML=standingsHTML(d?.response?.[0]?.league?.standings||[]);
-    } else if(tab==="h2h") {
-      const h=state.match.teams.home.id,a=state.match.teams.away.id;
-      const d=await api.getHeadToHead(`${h}-${a}`); const list=d?.response||[];
-      box.innerHTML=list.length?`<div class="grid grid-3">${list.slice(0,10).map(matchCard).join("")}</div>`:empty();
-      bindMatchCards(box);
-    } else if(tab==="players") {
-      const d=await fetchPlayersForMatch(id); box.innerHTML=playersHTML(d);
-    } else if(tab==="predictions") {
-      const d=await api.getPredictions(id); box.innerHTML=predictionHTML(d?.response?.[0]);
-    }
-  } catch(e) { box.innerHTML=errorBox(e); }
-}
-async function fetchPlayersForMatch(id) {
-  return (await api.getMatchDetails(id))?.response?.[0]?.players || [];
-}
-function eventHTML(events,f) {
-  return `<div class="event-list">${events.map(e=>{
-    const icon=e.type==="Goal"?"⚽":e.type==="Card"?"🟨":"↔";
-    const who=e.player?.name||"حدث"; const team=e.team?.id===f.teams.home.id?f.teams.home.name:f.teams.away.name;
-    return `<div class="event"><div class="event-time">${e.time?.elapsed??""}'${e.time?.extra?`+${e.time.extra}`:""}</div><div class="event-center"><span class="event-icon">${icon}</span><div><b>${esc(who)}</b><div class="small-muted">${esc(e.detail||e.type)} · ${esc(team)}</div></div></div><div></div></div>`;
-  }).join("")}</div>`;
-}
-function statsHTML(stats) {
-  const a=stats[0]?.statistics||[], b=stats[1]?.statistics||[];
-  const map=new Map(b.map(x=>[x.type,x.value]));
-  return `<div class="stats">${a.map(x=>{
-    const av=parseNum(x.value), bv=parseNum(map.get(x.type)), total=(av||0)+(bv||0);
-    const ap=total?Math.round(av/total*100):50, bp=100-ap;
-    return `<div class="stat-row"><div><b>${esc(x.value??"-")}</b></div><div class="small-muted">${esc(x.type)}</div><div><b>${esc(map.get(x.type)??"-")}</b></div>
-      <div></div><div class="bar"><i style="width:${ap}%"></i></div><div></div></div>`;
-  }).join("")}</div>`;
-}
-function parseNum(v){const n=parseFloat(String(v??"").replace("%",""));return Number.isFinite(n)?n:0;}
-function renderLineups(list) {
-  if(!list.length) return empty("لا توجد تشكيلات متاحة حاليًا");
-  return `<div class="grid grid-2">${list.map(x=>{
-    const players=x.startXI||[];
-    const formation=x.formation||"";
-    const rows=groupFormation(players,formation);
-    return `<div class="card"><div class="section-head"><h3>${esc(x.team?.name||"")}</h3><span class="status">${esc(formation)}</span></div>
-      <div class="lineup-pitch"><div class="lineup-grid">${rows.map(r=>`<div class="line">${r.map(p=>`<div class="player-dot"><span>${esc(p.number??"")}</span><small>${esc(p.player?.name||"")}</small></div>`).join("")}</div>`).join("")}</div></div>
-      <div class="small-muted" style="margin-top:12px">البدلاء: ${esc((x.substitutes||[]).slice(0,8).map(p=>p.player?.name).filter(Boolean).join("، ")||"غير متاح")}</div>
-      <div class="small-muted">المدرب: ${esc(x.coach?.name||"غير متاح")}</div>
-    </div>`;
-  }).join("")}</div>`;
-}
-function groupFormation(players,formation) {
-  const nums=(formation||"4-3-3").split("-").map(Number).filter(Boolean);
-  const out=[players.filter(p=>p.player?.pos==="G").slice(0,1)];
-  let remaining=players.filter(p=>p.player?.pos!=="G");
-  for(const n of nums){out.push(remaining.splice(0,n));}
-  if(remaining.length) out.push(remaining);
-  return out.filter(x=>x.length);
-}
-function standingsHTML(groups) {
-  const rows=groups.flat();
-  if(!rows.length)return empty();
-  return `<div class="card"><div class="table-wrap"><table><thead><tr><th>#</th><th>الفريق</th><th>لعب</th><th>ف</th><th>ت</th><th>خ</th><th>له</th><th>عليه</th><th>فارق</th><th>نقاط</th><th>آخر 5</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.rank??"-"}</td><td style="text-align:right">${logo(r.team?.logo,r.team?.name)} ${esc(r.team?.name||"")}</td><td>${r.all?.played??"-"}</td><td>${r.all?.win??"-"}</td><td>${r.all?.draw??"-"}</td><td>${r.all?.lose??"-"}</td><td>${r.all?.goals?.for??"-"}</td><td>${r.all?.goals?.against??"-"}</td><td>${r.goalsDiff??"-"}</td><td><b>${r.points??"-"}</b></td><td><div class="form">${String(r.form||"").slice(-5).split("").map(x=>`<i class="${x.toLowerCase()}"></i>`).join("")}</div></td></tr>`).join("")}</tbody></table></div></div>`;
-}
-function playersHTML(list) {
-  if(!list.length)return empty("لا توجد بيانات لاعبين متاحة حاليًا");
-  const arr=list.flatMap(x=>x.players||[]).slice(0,40);
-  return arr.length?`<div class="grid grid-3">${arr.map(p=>`<div class="card player-card">${p.player?.photo?`<img class="player-photo" src="${esc(p.player.photo)}" alt="${esc(p.player.name)}" loading="lazy">`:"<div class='player-photo'></div>"}<div><b>${esc(p.player?.name||"")}</b><div class="small-muted">${esc(p.player?.position||"")} · ${esc(p.player?.nationality||"")}</div><div class="small-muted">التقييم: ${esc(p.statistics?.[0]?.games?.rating||"-")}</div></div></div>`).join("")}</div>`:empty();
-}
-function predictionHTML(p) {
-  if(!p)return empty("لا توجد توقعات متاحة حاليًا");
-  const pct=p.predictions?.percent||{};
-  return `<div class="grid grid-3"><div class="card"><div class="small-muted">الفائز المتوقع</div><h2>${esc(p.predictions?.winner?.name||"غير متاح")}</h2><p>${esc(p.predictions?.advice||"")}</p></div>
-  <div class="card"><div class="small-muted">الاحتمالات</div><p>المضيف: <b>${esc(pct.home||"-")}</b></p><p>تعادل: <b>${esc(pct.draw||"-")}</b></p><p>الضيف: <b>${esc(pct.away||"-")}</b></p></div>
-  <div class="card"><div class="small-muted">التوقع</div><h2>${esc(p.predictions?.under_over||"-")}</h2></div></div>`;
-}
+/* ---------------- Events ---------------- */
+document.getElementById("prevDay").onclick = () => { state.date = shiftDate(state.date, -1); loadMatches({allowEmptyReplace:true}); };
+document.getElementById("nextDay").onclick = () => { state.date = shiftDate(state.date, 1); loadMatches({allowEmptyReplace:true}); };
+document.getElementById("todayBtn").onclick = () => { state.date = localDate(); loadMatches({allowEmptyReplace:true}); };
 
-async function renderLeagues() {
-  main.innerHTML=`<div class="section-head"><h1>البطولات</h1></div><div class="toolbar"><input id="leagueSearch" class="input" placeholder="ابحث عن بطولة..." minlength="3"></div><div id="leagueList">${skeleton()}</div>`;
-  const load=async(search="")=>{
-    $("#leagueList").innerHTML=skeleton();
-    try {
-      const d=await api.getLeagues(search?{search}:{current:true});
-      state.leagues=d?.response||[];
-      $("#leagueList").innerHTML=state.leagues.length?`<div class="grid grid-3">${state.leagues.slice(0,60).map(l=>`<article class="card league-card"><img class="league-logo" src="${esc(l.league?.logo||"")}" alt="" loading="lazy"><div><b>${esc(l.league?.name||"")}</b><div class="small-muted">${esc(l.country?.name||"")}</div><div class="small-muted">الموسم: ${esc(l.seasons?.at(-1)?.year||"")}</div></div></article>`).join("")}</div>`:empty();
-    }catch(e){$("#leagueList").innerHTML=errorBox(e);}
+document.querySelectorAll(".scope").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".scope").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.scope = btn.dataset.scope;
+    render();
   };
-  await load();
-  let t; $("#leagueSearch").oninput=e=>{clearTimeout(t);const q=e.target.value.trim();t=setTimeout(()=>q.length>=3?load(q):load(),350);};
-}
-async function renderStandings() {
-  main.innerHTML=`<div class="section-head"><h1>جدول الترتيب</h1></div><div class="toolbar"><input id="leagueId" class="input" type="number" placeholder="League ID مثال 39"><input id="season" class="input" type="number" value="${new Date().getFullYear()-1}"><button class="tab" id="loadStandings">عرض الترتيب</button></div><div id="standingBox">${empty("أدخل League ID والموسم لعرض الترتيب")}</div>`;
-  $("#loadStandings").onclick=async()=>{
-    const league=$("#leagueId").value,season=$("#season").value;
-    if(!league||!season)return showToast("أدخل رقم البطولة والموسم");
-    $("#standingBox").innerHTML=skeleton(1);
-    try{const d=await api.getStandings(league,season);$("#standingBox").innerHTML=standingsHTML(d?.response?.[0]?.league?.standings||[]);}
-    catch(e){$("#standingBox").innerHTML=errorBox(e);}
-  };
-}
-async function renderTeams() {
-  main.innerHTML=`<div class="section-head"><h1>الفرق</h1></div><div class="toolbar"><input id="teamSearch" class="input" placeholder="ابحث عن فريق..." minlength="3"></div><div id="teamList">${skeleton()}</div>`;
-  const load=async q=>{
-    $("#teamList").innerHTML=skeleton();
-    try{const d=await api.getTeams({search:q});const arr=d?.response||[];$("#teamList").innerHTML=arr.length?`<div class="grid grid-3">${arr.map(x=>`<article class="card league-card"><img class="league-logo" src="${esc(x.team?.logo||"")}" alt="" loading="lazy"><div><b>${esc(x.team?.name||"")}</b><div class="small-muted">${esc(x.team?.country||"")}</div><div class="small-muted">${esc(x.venue?.name||"")}</div></div></article>`).join("")}</div>`:empty("اكتب اسم فريق للبحث");}
-    catch(e){$("#teamList").innerHTML=errorBox(e);}
-  };
-  $("#teamSearch").oninput=e=>{clearTimeout(renderTeams.t);const q=e.target.value.trim();renderTeams.t=setTimeout(()=>q.length>=3?load(q):($("#teamList").innerHTML=empty("اكتب اسم فريق للبحث")),350);};
-  $("#teamList").innerHTML=empty("اكتب اسم فريق للبحث");
-}
-async function renderPlayers() {
-  main.innerHTML=`<div class="section-head"><h1>اللاعبين</h1></div><div class="toolbar"><input id="playerSearch" class="input" placeholder="ابحث عن لاعب..." minlength="3"></div><div id="playerList">${empty("اكتب اسم لاعب للبحث")}</div>`;
-  $("#playerSearch").oninput=e=>{
-    clearTimeout(renderPlayers.t);const q=e.target.value.trim();
-    renderPlayers.t=setTimeout(async()=>{
-      if(q.length<3){$("#playerList").innerHTML=empty("اكتب اسم لاعب للبحث");return;}
-      $("#playerList").innerHTML=skeleton(3);
-      try{const d=await api.searchPlayers(q);const arr=d?.response||[];$("#playerList").innerHTML=arr.length?`<div class="grid grid-3">${arr.map(x=>`<article class="card player-card"><img class="player-photo" src="${esc(x.player?.photo||"")}" alt="" loading="lazy"><div><b>${esc(x.player?.name||"")}</b><div class="small-muted">${esc(x.player?.nationality||"")} · ${esc(x.player?.age||"-")} سنة</div><div class="small-muted">${esc(x.player?.position||"")}</div></div></article>`).join("")}</div>`:empty("لا توجد بيانات متاحة حاليًا");}
-      catch(e){$("#playerList").innerHTML=errorBox(e);}
-    },350);
-  };
-}
-function renderSearch() {
-  main.innerHTML=`<div class="section-head"><h1>بحث</h1></div><div class="card"><input id="globalSearch" class="input" style="width:100%" placeholder="فريق، لاعب أو بطولة..." minlength="3"><div id="searchResults" class="search-results" style="margin-top:12px">${empty("ابدأ بكتابة 3 أحرف على الأقل")}</div></div>`;
-  let timer;
-  $("#globalSearch").oninput=e=>{
-    clearTimeout(timer);const q=e.target.value.trim();if(q.length<3){$("#searchResults").innerHTML=empty("ابدأ بكتابة 3 أحرف على الأقل");return;}
-    timer=setTimeout(()=>globalSearch(q),350);
-  };
-}
-async function globalSearch(q) {
-  $("#searchResults").innerHTML=skeleton(2);
-  try{
-    const [teams,players,leagues]=await Promise.allSettled([api.searchTeams(q),api.searchPlayers(q),api.searchLeagues(q)]);
-    const t=teams.status==="fulfilled"?(teams.value?.response||[]):[], p=players.status==="fulfilled"?(players.value?.response||[]):[], l=leagues.status==="fulfilled"?(leagues.value?.response||[]):[];
-    const html=[...t.slice(0,5).map(x=>`<div class="search-item">${logo(x.team?.logo,x.team?.name)}<div><b>${esc(x.team?.name)}</b><div class="small-muted">فريق · ${esc(x.team?.country||"")}</div></div></div>`),
-      ...p.slice(0,5).map(x=>`<div class="search-item"><img class="player-photo" src="${esc(x.player?.photo||"")}" alt=""><div><b>${esc(x.player?.name)}</b><div class="small-muted">لاعب · ${esc(x.player?.nationality||"")}</div></div></div>`),
-      ...l.slice(0,5).map(x=>`<div class="search-item">${logo(x.league?.logo,x.league?.name)}<div><b>${esc(x.league?.name)}</b><div class="small-muted">بطولة · ${esc(x.country?.name||"")}</div></div></div>`)];
-    $("#searchResults").innerHTML=html.length?html.join(""):empty("لا توجد نتائج مطابقة");
-  }catch(e){$("#searchResults").innerHTML=errorBox(e);}
-}
+});
 
-async function route() {
-  clearInterval(state.liveTimer);
-  state.route=location.hash.replace("#","")||"home"; setActiveNav();
-  const [base,id]=state.route.split("/");
-  if(base==="home") return renderHome();
-  if(base==="matches") return renderMatches();
-  if(base==="match" && id) return renderMatch(id);
-  if(base==="leagues") return renderLeagues();
-  if(base==="standings") return renderStandings();
-  if(base==="teams") return renderTeams();
-  if(base==="players") return renderPlayers();
-  if(base==="search") return renderSearch();
-  navigate("home");
-}
-function navigate(r){location.hash=r;}
-$("#themeBtn").onclick=()=>{
-  const dark=document.documentElement.dataset.theme==="dark";
-  document.documentElement.dataset.theme=dark?"light":"dark";
-  localStorage.setItem("kp-theme",dark?"light":"dark");
+document.querySelectorAll(".filter").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".filter").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.filter = btn.dataset.filter;
+    render();
+  };
+});
+
+let searchTimer;
+document.getElementById("searchInput").oninput = (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.query = e.target.value; render(); }, 150);
 };
-$("#searchBtn").onclick=()=>navigate("search");
-const savedTheme=localStorage.getItem("kp-theme")||"light";
-document.documentElement.dataset.theme=savedTheme;
-window.addEventListener("hashchange",route);
-route();
+
+document.getElementById("themeBtn").onclick = () => {
+  document.documentElement.classList.toggle("dark");
+  localStorage.setItem("dark", document.documentElement.classList.contains("dark") ? "1" : "0");
+};
+if (localStorage.getItem("dark") === "1") document.documentElement.classList.add("dark");
+
+document.getElementById("langBtn").onclick = () => {
+  state.lang = state.lang === "ar" ? "en" : "ar";
+  localStorage.setItem("lang", state.lang);
+  applyLang();
+  render();
+};
+
+/* ---------------- Init ---------------- */
+applyLang();
+loadMatches();
+
+// Gentle auto-refresh for live matches on today's view.
+setInterval(() => {
+  if (state.date === localDate()) loadMatches();
+}, 60000);
