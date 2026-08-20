@@ -2,19 +2,16 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>كورة بلس | نتائج ومباريات كرة القدم</title>
-  <meta name="description" content="كورة بلس — نتائج كرة القدم المباشرة، المباريات، البطولات، الترتيب، الفرق واللاعبين.">
-  <meta name="theme-color" content="#0b1220">
-  <meta property="og:title" content="كورة بلس">
-  <meta property="og:description" content="منصة احترافية لنتائج ومباريات كرة القدم">
-  <meta property="og:type" content="website">
+  <meta name="description" content="كورة بلس — نتائج ومباريات كرة القدم المباشرة.">
+  <meta name="theme-color" content="#07111f">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
     <header class="topbar">
-      <a class="brand" href="#home" aria-label="كورة بلس">
+      <a class="brand" href="#home" data-route="home" aria-label="كورة بلس">
         <span class="brand-mark">K+</span>
         <span><b>كورة</b> بلس</span>
       </a>
@@ -22,8 +19,7 @@
         <a href="#home" data-route="home">الرئيسية</a>
         <a href="#matches" data-route="matches">المباريات</a>
         <a href="#leagues" data-route="leagues">البطولات</a>
-        <a href="#teams" data-route="teams">الفرق</a>
-        <a href="#players" data-route="players">اللاعبين</a>
+        <a href="#search" data-route="search">بحث</a>
       </nav>
       <div class="top-actions">
         <button class="icon-btn" id="searchBtn" title="بحث" aria-label="بحث">⌕</button>
@@ -40,8 +36,7 @@
       <a href="#search" data-route="search"><span>⌕</span><small>بحث</small></a>
     </nav>
   </div>
-
-  <div id="toast" class="toast" role="status"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js" type="module"></script>
 </body>
 </html>

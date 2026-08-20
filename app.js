@@ -1,131 +1,37 @@
-/* Kora Plus - free API edition */
-const DICT={ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",standings:"الترتيب",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات والمباريات.",today:"مباريات اليوم",live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",all:"الكل",loading:"جاري تحميل المباريات...",empty:"لا توجد مباريات متاحة حالياً",error:"تعذر تحميل البيانات حالياً",retry:"إعادة المحاولة",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",noSearch:"لا توجد نتائج مطابقة.",cached:"بيانات محفوظة مؤقتاً",details:"التفاصيل",venue:"الملعب"},en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",standings:"Standings",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Fixtures, live scores, major leagues and important matches.",today:"Today's Matches",live:"Live",scheduled:"Upcoming",finished:"Finished",all:"All",loading:"Loading matches...",empty:"No matches available right now",error:"Unable to load data right now",retry:"Retry",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",noSearch:"No matching results.",cached:"Cached data",details:"Details",venue:"Venue"}};
+/* Kora Plus - UI layer. API access remains in api.js -> Cloudflare Worker. */
+const DICT={
+  ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات في واجهة بسيطة وسريعة.",today:"مباريات اليوم",live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",all:"الكل",loading:"جاري تحميل المباريات...",empty:"لا توجد مباريات في هذا اليوم",error:"تعذر تحميل المباريات",retry:"إعادة المحاولة",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",noSearch:"لا توجد نتائج مطابقة للبحث.",venue:"الملعب",important:"أهم المباريات",importantSub:"اختيارات اليوم",importantLeagues:"البطولات المهمة",count:"مباراة",cached:"بيانات محفوظة مؤقتاً"},
+  en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Live scores and major football competitions in a clean, fast interface.",today:"Today's Matches",live:"Live",scheduled:"Upcoming",finished:"Finished",all:"All",loading:"Loading matches...",empty:"No matches on this day",error:"Unable to load matches",retry:"Retry",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",noSearch:"No matching results.",venue:"Venue",important:"Important Matches",importantSub:"Today's picks",importantLeagues:"Top competitions",count:"matches",cached:"Cached data"}
+};
 const TOP=new Set([2,3,848,39,40,140,141,135,136,78,79,61,62,88,94,203,307,233,1,4,9,32]);
-const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false};
+const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false,requestId:0};
 const t=k=>(DICT[state.lang]||DICT.ar)[k]||k;
 function localDate(d=new Date()){const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);const g=x=>p.find(v=>v.type===x)?.value;return `${g("year")}-${g("month")}-${g("day")}`}
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
 function dateLabel(date){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",weekday:"long",day:"numeric",month:"long"}).format(new Date(`${date}T12:00:00`))}
+function shortDate(date){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",weekday:"short",day:"numeric",month:"short"}).format(new Date(`${date}T12:00:00`))}
 function timeLabel(iso){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",hour:"2-digit",minute:"2-digit"}).format(new Date(iso))}
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
 function typeOf(s){if(["1H","2H","ET","BT","P","LIVE","HT","INT"].includes(s))return"live";if(["FT","AET","PEN","AWD","WO","CANC","ABD"].includes(s))return"finished";return"scheduled"}
-function status(m){const type=typeOf(m?.status?.short);if(type==="live")return `● ${m?.status?.elapsed?m.status.elapsed+"'":t("live")}`;if(type==="finished")return t("finished");return m?.date?timeLabel(m.date):"—"}
-function normalizeMatch(raw={}){const fixture=raw.fixture||{};const teams=raw.teams||{};const league=raw.league||{};const goals=raw.goals||{};return {...raw,id:raw.id??fixture.id,date:raw.date??fixture.date,status:(raw.status??fixture.status??{}),home:raw.home??teams.home??{},away:raw.away??teams.away??{},goals,league,venue:raw.venue??fixture.venue,referee:raw.referee??fixture.referee};}
-function key(date){return `kora-free-fixtures:${date}`}
-function cached(date){try{const x=JSON.parse(localStorage.getItem(key(date))||"null");return Array.isArray(x?.data)?x.data.map(normalizeMatch):null}catch{return null}}
-function save(date,data){try{localStorage.setItem(key(date),JSON.stringify({time:Date.now(),data}))}catch{}}
-let apiPromise;
-function api(){return apiPromise||(apiPromise=import("./api.js").then(m=>m.api))}
-async function load({force=false}={}){if(state.loading)return;state.loading=true;state.error="";const old=cached(state.date);if(old?.length&&!state.matches.length){state.matches=old;state.usingCache=true;render()}
-try{const client=await api();const data=await client.getFixtures({date:state.date},{force});const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);if(rows.length){state.matches=rows;state.usingCache=false;save(state.date,rows)}else if(!state.matches.length){state.matches=[]}}catch(e){if(!state.matches.length)state.error=e?.message||t("error")}finally{state.loading=false;render()}}
+function statusText(m){const type=typeOf(m?.status?.short);if(type==="live")return m?.status?.elapsed?`${m.status.elapsed}' ${t("live")}`:`● ${t("live")}`;if(type==="finished")return t("finished");return m?.date?timeLabel(m.date):"—"}
+function normalizeMatch(raw={}){const fixture=raw.fixture||{};const teams=raw.teams||{};const league=raw.league||{};const goals=raw.goals||{};return {...raw,id:raw.id??fixture.id,date:raw.date??fixture.date,status:(raw.status??fixture.status??{}),home:raw.home??teams.home??{},away:raw.away??teams.away??{},goals,league,venue:raw.venue??fixture.venue,referee:raw.referee??fixture.referee}}
+function cacheKey(date){return `kora-free-fixtures:${date}`}
+function cached(date){try{const x=JSON.parse(localStorage.getItem(cacheKey(date))||"null");return Array.isArray(x?.data)?x.data.map(normalizeMatch):null}catch{return null}}
+function save(date,data){try{localStorage.setItem(cacheKey(date),JSON.stringify({time:Date.now(),data}))}catch{}}
+let apiPromise;function api(){return apiPromise||(apiPromise=import("./api.js").then(m=>m.api))}
+function setDate(date){state.date=date;state.matches=[];state.error="";state.usingCache=false;const old=cached(date);if(old?.length){state.matches=old;state.usingCache=true}render();load()}
+async function load({force=false}={}){const requestId=++state.requestId;const requestedDate=state.date;state.loading=true;state.error="";render();try{const client=await api();const data=await client.getFixtures({date:requestedDate},{force});if(requestId!==state.requestId||requestedDate!==state.date)return;const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);state.matches=rows;state.usingCache=false;if(rows.length)save(requestedDate,rows)}catch(e){if(requestId!==state.requestId||requestedDate!==state.date)return;if(!state.matches.length)state.error=e?.message||t("error")}finally{if(requestId===state.requestId){state.loading=false;render()}}}
 function visible(){const q=state.query.trim().toLowerCase();return state.matches.filter(m=>{const typ=typeOf(m?.status?.short);const text=[m?.home?.name,m?.away?.name,m?.league?.name,m?.league?.country].join(" ").toLowerCase();return(state.filter==="all"||typ===state.filter)&&(!q||text.includes(q))})}
-function matchCard(m){const home=m?.home||{},away=m?.away||{},typ=typeOf(m?.status?.short),gh=m?.goals?.home,ga=m?.goals?.away;const score=gh==null&&ga==null?"—":`${gh??0} - ${ga??0}`;const homeImg=home.logo?`<img class="team-logo" src="${esc(home.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">`:"";const awayImg=away.logo?`<img class="team-logo" src="${esc(away.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">`:"";return `<article class="card match-card"><div class="match-meta"><span>${esc(m?.league?.name||"—")}</span><span class="status ${typ===`live`?`live`:typ===`finished`?`done`:``}">${esc(status(m))}</span></div><div class="match-teams"><div>${homeImg}<div class="team-name">${esc(home.name||"—")}</div></div><div class="match-score">${score}</div><div>${awayImg}<div class="team-name">${esc(away.name||"—")}</div></div></div>${m?.venue?.name?`<div class="match-meta"><span>${t("venue")}</span><span>${esc(m.venue.name)}</span></div>`:""}</article>`}
-function importantRows(rows){
-  return [...rows]
-    .filter(m=>TOP.has(m?.league?.id) || typeOf(m?.status?.short)==="live")
-    .sort((a,b)=>{
-      const liveA=typeOf(a?.status?.short)==="live"?0:1;
-      const liveB=typeOf(b?.status?.short)==="live"?0:1;
-      if(liveA!==liveB)return liveA-liveB;
-      const topA=TOP.has(a?.league?.id)?0:1;
-      const topB=TOP.has(b?.league?.id)?0:1;
-      if(topA!==topB)return topA-topB;
-      return new Date(a?.date||0)-new Date(b?.date||0);
-    })
-    .slice(0,6);
-}
-function importantCards(rows){
-  const items=importantRows(rows);
-  if(!items.length)return `<section class="section" id="important"><div class="section-head"><h2>${state.lang==="ar"?"أهم المباريات":"Important Matches"}</h2></div><div class="card">${t("empty")}</div></section>`;
-  return `<section class="section" id="important"><div class="section-head"><div><small>${state.lang==="ar"?"مختارة بعناية":"Selected matches"}</small><h2>${state.lang==="ar"?"أهم المباريات":"Important Matches"}</h2></div><span class="link">${items.length}</span></div><div class="grid grid-3">${items.map(matchCard).join("")}</div></section>`;
-}
-function groupCards(rows){const groups=new Map();rows.forEach(m=>{const k=`${m?.league?.id||0}-${m?.league?.name||""}`;(groups.get(k)||groups.set(k,[]).get(k)).push(m)});return [...groups.values()].sort((a,b)=>(TOP.has(a[0]?.league?.id)?0:1)-(TOP.has(b[0]?.league?.id)?0:1)).map(g=>`<section class="section"><div class="section-head"><h2>${esc(g[0]?.league?.name||t("matches"))}</h2><span class="link">${esc(g[0]?.league?.country||"")}</span></div><div class="grid grid-3">${g.map(matchCard).join("")}</div></section>`).join("")}
-function render(){
-  const main=document.getElementById("main");
-  if(!main)return;
-  document.documentElement.lang=state.lang;
-  document.documentElement.dir=state.lang==="ar"?"rtl":"ltr";
-  document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark";
-  document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";
-  const rows=visible();
-  const featured=rows[0];
-  const todayActive = state.date === localDate();
-  main.innerHTML=`
-    <div class="date-nav-top" aria-label="${t("todayBtn")}">
-      <button class="date-nav-btn" data-action="prev">${t("previous")}</button>
-      <button class="date-nav-btn ${todayActive ? "active" : ""}" data-action="today">${t("todayBtn")}</button>
-      <button class="date-nav-btn" data-action="next">${t("next")}</button>
-    </div>
-    <section class="hero" id="home">
-      <div class="hero-grid">
-        <div>
-          <small>${t("heroEyebrow")}</small>
-          <h1>${t("heroTitle")}</h1>
-          <p>${t("heroDesc")}</p>
-          <div class="toolbar">
-            <button class="input" data-action="today">${t("todayBtn")}</button>
-            <button class="input" data-action="refresh">${state.loading?t("loading"):t("retry")}</button>
-          </div>
-        </div>
-        <div class="featured">
-          ${featured?`
-            <div class="match-meta"><span>${esc(featured.league?.name||"")}</span><span>${esc(dateLabel(state.date))}</span></div>
-            <div class="featured-teams">
-              <div>${featured.home?.logo?`<img class="team-logo" src="${esc(featured.home.logo)}" alt="">`:""}<div>${esc(featured.home?.name||"—")}</div></div>
-              <div><div class="score-big">${featured.goals?.home==null&&featured.goals?.away==null?"—":`${featured.goals?.home??0} - ${featured.goals?.away??0}`}</div><span>${esc(status(featured))}</span></div>
-              <div>${featured.away?.logo?`<img class="team-logo" src="${esc(featured.away.logo)}" alt="">`:""}<div>${esc(featured.away?.name||"—")}</div></div>
-            </div>`
-          :`<div style="min-height:130px;display:grid;place-items:center">${t("empty")}</div>`}
-        </div>
-      </div>
-    </section>
-    ${importantCards(rows)}
-    <div class="section" id="matches">
-      <div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("matches")}</span></div>
-      <div class="toolbar"><input class="input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}"><select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select></div>
-      ${state.error&&!state.matches.length?`<div class="card">${esc(state.error)} <button class="input" data-action="refresh">${t("retry")}</button></div>`:""}
-      ${state.loading&&!state.matches.length?`<div class="card">${t("loading")}</div>`:""}
-      ${!state.loading&&!state.error&&!rows.length?`<div class="card">${state.query?t("noSearch"):t("empty")}</div>`:""}
-    </div>
-    ${rows.length?`<div id="leagues">${groupCards(rows)}</div>`:""}`;
-  main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{
-    const a=b.dataset.action;
-    if(a==="prev"||a==="next"){state.date=shiftDate(state.date,a==="next"?1:-1);state.matches=[];load()}
-    else if(a==="today"){state.date=localDate();state.matches=[];load()}
-    else load({force:true});
-  });
-  const search=main.querySelector("#searchInput");
-  if(search)search.oninput=e=>{state.query=e.target.value;render()};
-  const filter=main.querySelector("#filter");
-  if(filter){filter.value=state.filter;filter.onchange=e=>{state.filter=e.target.value;render()}}
-}
-document.getElementById("themeBtn")?.addEventListener("click",()=>{const next=(document.documentElement.dataset.theme||"dark")==="dark"?"light":"dark";document.documentElement.dataset.theme=next;localStorage.setItem("theme",next)});
-document.getElementById("searchBtn")?.addEventListener("click",()=>document.getElementById("searchInput")?.focus());
-function navigateRoute(route){
-  const top=()=>window.scrollTo({top:0,behavior:"smooth"});
-  if(route==="home"){top();return}
-  if(route==="search"){
-    const input=document.getElementById("searchInput");
-    if(input){input.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>input.focus(),350)}
-    return;
-  }
-  if(route==="matches"){
-    document.getElementById("matches")?.scrollIntoView({behavior:"smooth",block:"start"});
-    return;
-  }
-  if(route==="leagues"){
-    document.getElementById("leagues")?.scrollIntoView({behavior:"smooth",block:"start"});
-    return;
-  }
-  if(route==="standings"){
-    document.getElementById("standings")?.scrollIntoView({behavior:"smooth",block:"start"});
-    return;
-  }
-  top();
-}
-document.querySelectorAll("[data-route]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();navigateRoute(a.dataset.route)}));
-if(!localStorage.getItem("theme"))localStorage.setItem("theme","dark");
-window.addEventListener("online",()=>load({force:true}));
-load();
-// Refresh every 30 minutes to stay within free API limits.
-setInterval(()=>{if(state.date===localDate())load()},1800000);
+function logo(url){return url?`<img class="team-logo" src="${esc(url)}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'">`:``}
+function matchCard(m,important=false){const home=m?.home||{},away=m?.away||{},typ=typeOf(m?.status?.short),gh=m?.goals?.home,ga=m?.goals?.away;const score=gh==null&&ga==null?"—":`${gh??0} - ${ga??0}`;return `<article class="card match-card ${important?"important-card":""}"><div class="match-meta"><span>${esc(m?.league?.name||"—")}</span><span class="status ${typ==="live"?"live":typ==="finished"?"done":""}">${esc(statusText(m))}</span></div><div class="match-teams"><div class="match-team">${logo(home.logo)}<div class="team-name">${esc(home.name||"—")}</div></div><div><div class="match-score">${score}</div><span class="match-score-status">${typ==="scheduled"?esc(statusText(m)):typ==="live"?t("live"):t("finished")}</span></div><div class="match-team">${logo(away.logo)}<div class="team-name">${esc(away.name||"—")}</div></div></div>${m?.venue?.name?`<div class="match-detail"><span>${t("venue")}</span><span>${esc(m.venue.name)}</span></div>`:""}</article>`}
+function importantRows(rows){return [...rows].filter(m=>TOP.has(Number(m?.league?.id))||typeOf(m?.status?.short)==="live").sort((a,b)=>{const la=typeOf(a?.status?.short)==="live"?0:1,lb=typeOf(b?.status?.short)==="live"?0:1;if(la!==lb)return la-lb;const ta=TOP.has(Number(a?.league?.id))?0:1,tb=TOP.has(Number(b?.league?.id))?0:1;if(ta!==tb)return ta-tb;return new Date(a?.date||0)-new Date(b?.date||0)}).slice(0,8)}
+function importantSection(rows){const items=importantRows(rows);return `<section class="section" id="important"><div class="section-head"><div><small>${t("importantSub")}</small><h2>${t("important")}</h2></div><span class="link">${items.length}</span></div>${items.length?`<div class="important-grid">${items.map(m=>matchCard(m,true)).join("")}</div>`:`<div class="card empty">${t("empty")}</div>`}</section>`}
+function leagueChips(rows){const map=new Map();rows.forEach(m=>{const id=Number(m?.league?.id||0);if(!map.has(id))map.set(id,{name:m?.league?.name||"—",country:m?.league?.country||"",count:0});map.get(id).count++});const list=[...map.values()].sort((a,b)=>b.count-a.count).slice(0,10);if(!list.length)return"";return `<section class="section" id="leagues"><div class="league-title"><h3>${t("importantLeagues")}</h3><span>${list.length}</span></div><div class="important-leagues">${list.map(x=>`<div class="league-chip">${esc(x.name)} <strong>${x.count}</strong></div>`).join("")}</div></section>`}
+function groupCards(rows){const groups=new Map();rows.forEach(m=>{const k=`${m?.league?.id||0}-${m?.league?.name||""}`;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(m)});return [...groups.values()].sort((a,b)=>(TOP.has(Number(a[0]?.league?.id))?0:1)-(TOP.has(Number(b[0]?.league?.id))?0:1)).map(g=>`<section class="league-section"><div class="league-title"><h3>${esc(g[0]?.league?.name||t("matches"))}</h3><span>${esc(g[0]?.league?.country||"")}</span></div><div class="grid grid-3">${g.map(m=>matchCard(m)).join("")}</div></section>`).join("")}
+function skeleton(){return `<div class="skeleton-grid">${Array.from({length:3},()=>`<div class="skeleton skel-card"></div>`).join("")}</div>`}
+function stateBox(){if(state.loading&&!state.matches.length)return skeleton();if(state.error&&!state.matches.length)return `<div class="card state error-box"><div><strong>${esc(t("error"))}</strong><div>${esc(state.error)}</div><button class="retry-btn" data-action="refresh">${t("retry")}</button></div></div>`;if(!state.loading&&!state.matches.length)return `<div class="card state"><div><strong>${state.query?t("noSearch"):t("empty")}</strong>${!state.query?`<button class="retry-btn" data-action="today">${t("todayBtn")}</button>`:""}</div></div>`;return""}
+function render(){const main=document.getElementById("main");if(!main)return;document.documentElement.lang=state.lang;document.documentElement.dir=state.lang==="ar"?"rtl":"ltr";document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark";document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";const rows=visible();const featured=importantRows(rows)[0]||rows[0];const today=localDate();const prevActive=state.date<today,nextActive=state.date>today;main.innerHTML=`<section class="hero" id="home"><div class="hero-grid"><div><small>${t("heroEyebrow")}</small><h1>${t("heroTitle")}</h1><p>${t("heroDesc")}</p><div class="hero-actions"><button class="control" data-action="today">${t("todayBtn")}</button><button class="control" data-action="refresh">${state.loading?t("loading"):t("retry")}</button></div></div><div class="featured">${featured?`<div class="match-meta"><span>${esc(featured.league?.name||"")}</span><span>${esc(dateLabel(state.date))}</span></div><div class="featured-teams"><div class="featured-team">${logo(featured.home?.logo)}<div class="team-name">${esc(featured.home?.name||"—")}</div></div><div><div class="score-big">${featured.goals?.home==null&&featured.goals?.away==null?"—":`${featured.goals?.home??0} - ${featured.goals?.away??0}`}</div><span class="featured-status ${typeOf(featured.status?.short)==="live"?"live":""}">${esc(statusText(featured))}</span></div><div class="featured-team">${logo(featured.away?.logo)}<div class="team-name">${esc(featured.away?.name||"—")}</div></div></div>`:`<div class="empty">${state.loading?t("loading"):t("empty")}</div>`}</div></div></section><div class="date-nav" role="tablist" aria-label="اختيار اليوم"><button class="date-btn ${prevActive?"active":""}" data-action="prev">${t("previous")}</button><button class="date-btn ${state.date===today?"active":""}" data-action="today">${t("todayBtn")}</button><button class="date-btn ${nextActive?"active":""}" data-action="next">${t("next")}</button></div><div class="date-label">${esc(dateLabel(state.date))}</div>${importantSection(rows)}<div class="ad-slot">مساحة إعلانية — أعلى الصفحة</div><section class="section" id="matches"><div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("count")}</span></div><div class="toolbar"><button class="control" data-action="prev">${t("previous")}</button><button class="control" data-action="today">${t("todayBtn")}</button><button class="control" data-action="next">${t("next")}</button></div><div class="search-row"><input class="search-input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}"><select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select></div>${state.usingCache&&!state.loading?`<div class="date-label">${t("cached")}</div>`:""}${state.loading&&state.matches.length?`<div class="date-label">${t("loading")}</div>`:""}${state.matches.length?groupCards(rows):stateBox()}</section>${rows.length?leagueChips(rows):""}`;bindActions();updateNav()}
+function bindActions(){const main=document.getElementById("main");main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{const a=b.dataset.action;if(a==="prev")setDate(shiftDate(state.date,-1));else if(a==="next")setDate(shiftDate(state.date,1));else if(a==="today")setDate(localDate());else load({force:true})});const search=main.querySelector("#searchInput");if(search)search.oninput=e=>{state.query=e.target.value;render();const el=document.getElementById("searchInput");if(el){el.focus();el.setSelectionRange(state.query.length,state.query.length)}};const filter=main.querySelector("#filter");if(filter){filter.value=state.filter;filter.onchange=e=>{state.filter=e.target.value;render()}}}
+function updateNav(){const current=location.hash.replace("#","")||"home";document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===current));}
+function navigateRoute(route){if(route==="home")window.scrollTo({top:0,behavior:"smooth"});else if(route==="matches")document.getElementById("matches")?.scrollIntoView({behavior:"smooth",block:"start"});else if(route==="leagues")document.getElementById("leagues")?.scrollIntoView({behavior:"smooth",block:"start"});else if(route==="search"){document.getElementById("searchInput")?.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>document.getElementById("searchInput")?.focus(),300)}updateNav()}
+document.querySelectorAll("[data-route]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();navigateRoute(a.dataset.route)}));window.addEventListener("hashchange",()=>navigateRoute(location.hash.replace("#","")||"home"));document.getElementById("themeBtn")?.addEventListener("click",()=>{const next=(document.documentElement.dataset.theme||"dark")==="dark"?"light":"dark";document.documentElement.dataset.theme=next;localStorage.setItem("theme",next)});document.getElementById("searchBtn")?.addEventListener("click",()=>navigateRoute("search"));if(!localStorage.getItem("theme"))localStorage.setItem("theme","dark");window.addEventListener("online",()=>load({force:true}));load();setInterval(()=>{if(state.date===localDate())load({force:true})},1800000);
