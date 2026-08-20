@@ -1,5 +1,5 @@
 /* Kora Plus - free API edition */
-const DICT={ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",standings:"الترتيب",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة والبطولات والترتيب — باستخدام API مجاني فقط.",today:"مباريات اليوم",live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",all:"الكل",loading:"جاري تحميل المباريات...",empty:"لا توجد مباريات متاحة حالياً",error:"تعذر تحميل البيانات حالياً",retry:"إعادة المحاولة",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",noSearch:"لا توجد نتائج مطابقة.",cached:"بيانات محفوظة مؤقتاً",freeApi:"API مجاني",details:"التفاصيل",venue:"الملعب"},en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",standings:"Standings",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Fixtures, live scores, leagues and standings powered by a free API only.",today:"Today's Matches",live:"Live",scheduled:"Upcoming",finished:"Finished",all:"All",loading:"Loading matches...",empty:"No matches available right now",error:"Unable to load data right now",retry:"Retry",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",noSearch:"No matching results.",cached:"Cached data",freeApi:"Free API",details:"Details",venue:"Venue"}};
+const DICT={ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",standings:"الترتيب",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات والمباريات.",today:"مباريات اليوم",live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",all:"الكل",loading:"جاري تحميل المباريات...",empty:"لا توجد مباريات متاحة حالياً",error:"تعذر تحميل البيانات حالياً",retry:"إعادة المحاولة",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",noSearch:"لا توجد نتائج مطابقة.",cached:"بيانات محفوظة مؤقتاً",details:"التفاصيل",venue:"الملعب"},en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",standings:"Standings",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Fixtures, live scores, major leagues and important matches.",today:"Today's Matches",live:"Live",scheduled:"Upcoming",finished:"Finished",all:"All",loading:"Loading matches...",empty:"No matches available right now",error:"Unable to load data right now",retry:"Retry",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",noSearch:"No matching results.",cached:"Cached data",details:"Details",venue:"Venue"}};
 const TOP=new Set([2,3,848,39,40,140,141,135,136,78,79,61,62,88,94,203,307,233,1,4,9,32]);
 const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false};
 const t=k=>(DICT[state.lang]||DICT.ar)[k]||k;
@@ -20,8 +20,87 @@ async function load({force=false}={}){if(state.loading)return;state.loading=true
 try{const client=await api();const data=await client.getFixtures({date:state.date},{force});const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);if(rows.length){state.matches=rows;state.usingCache=false;save(state.date,rows)}else if(!state.matches.length){state.matches=[]}}catch(e){if(!state.matches.length)state.error=e?.message||t("error")}finally{state.loading=false;render()}}
 function visible(){const q=state.query.trim().toLowerCase();return state.matches.filter(m=>{const typ=typeOf(m?.status?.short);const text=[m?.home?.name,m?.away?.name,m?.league?.name,m?.league?.country].join(" ").toLowerCase();return(state.filter==="all"||typ===state.filter)&&(!q||text.includes(q))})}
 function matchCard(m){const home=m?.home||{},away=m?.away||{},typ=typeOf(m?.status?.short),gh=m?.goals?.home,ga=m?.goals?.away;const score=gh==null&&ga==null?"—":`${gh??0} - ${ga??0}`;const homeImg=home.logo?`<img class="team-logo" src="${esc(home.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">`:"";const awayImg=away.logo?`<img class="team-logo" src="${esc(away.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">`:"";return `<article class="card match-card"><div class="match-meta"><span>${esc(m?.league?.name||"—")}</span><span class="status ${typ===`live`?`live`:typ===`finished`?`done`:``}">${esc(status(m))}</span></div><div class="match-teams"><div>${homeImg}<div class="team-name">${esc(home.name||"—")}</div></div><div class="match-score">${score}</div><div>${awayImg}<div class="team-name">${esc(away.name||"—")}</div></div></div>${m?.venue?.name?`<div class="match-meta"><span>${t("venue")}</span><span>${esc(m.venue.name)}</span></div>`:""}</article>`}
+function importantRows(rows){
+  return [...rows]
+    .filter(m=>TOP.has(m?.league?.id) || typeOf(m?.status?.short)==="live")
+    .sort((a,b)=>{
+      const liveA=typeOf(a?.status?.short)==="live"?0:1;
+      const liveB=typeOf(b?.status?.short)==="live"?0:1;
+      if(liveA!==liveB)return liveA-liveB;
+      const topA=TOP.has(a?.league?.id)?0:1;
+      const topB=TOP.has(b?.league?.id)?0:1;
+      if(topA!==topB)return topA-topB;
+      return new Date(a?.date||0)-new Date(b?.date||0);
+    })
+    .slice(0,6);
+}
+function importantCards(rows){
+  const items=importantRows(rows);
+  if(!items.length)return `<section class="section" id="important"><div class="section-head"><h2>${state.lang==="ar"?"أهم المباريات":"Important Matches"}</h2></div><div class="card">${t("empty")}</div></section>`;
+  return `<section class="section" id="important"><div class="section-head"><div><small>${state.lang==="ar"?"مختارة بعناية":"Selected matches"}</small><h2>${state.lang==="ar"?"أهم المباريات":"Important Matches"}</h2></div><span class="link">${items.length}</span></div><div class="grid grid-3">${items.map(matchCard).join("")}</div></section>`;
+}
 function groupCards(rows){const groups=new Map();rows.forEach(m=>{const k=`${m?.league?.id||0}-${m?.league?.name||""}`;(groups.get(k)||groups.set(k,[]).get(k)).push(m)});return [...groups.values()].sort((a,b)=>(TOP.has(a[0]?.league?.id)?0:1)-(TOP.has(b[0]?.league?.id)?0:1)).map(g=>`<section class="section"><div class="section-head"><h2>${esc(g[0]?.league?.name||t("matches"))}</h2><span class="link">${esc(g[0]?.league?.country||"")}</span></div><div class="grid grid-3">${g.map(matchCard).join("")}</div></section>`).join("")}
-function render(){const main=document.getElementById("main");if(!main)return;document.documentElement.lang=state.lang;document.documentElement.dir=state.lang==="ar"?"rtl":"ltr";document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark";document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";const rows=visible(),live=state.matches.filter(m=>typeOf(m?.status?.short)==="live").length;const featured=rows[0];main.innerHTML=`<section class="hero" id="home"><div class="hero-grid"><div><small>${t("heroEyebrow")}</small><h1>${t("heroTitle")}</h1><p>${t("heroDesc")}</p><div class="toolbar"><button class="input" data-action="today">${t("todayBtn")}</button><button class="input" data-action="refresh">${state.loading?t("loading"):t("retry")}</button></div></div><div class="featured">${featured?`<div class="match-meta"><span>${esc(featured.league?.name||"")}</span><span>${esc(dateLabel(state.date))}</span></div><div class="featured-teams"><div>${featured.home?.logo?`<img class="team-logo" src="${esc(featured.home.logo)}" alt="">`:""}<div>${esc(featured.home?.name||"—")}</div></div><div><div class="score-big">${featured.goals?.home==null&&featured.goals?.away==null?"—":`${featured.goals?.home??0} - ${featured.goals?.away??0}`}</div><span>${esc(status(featured))}</span></div><div>${featured.away?.logo?`<img class="team-logo" src="${esc(featured.away.logo)}" alt="">`:""}<div>${esc(featured.away?.name||"—")}</div></div></div>`:`<div style="min-height:130px;display:grid;place-items:center">${t("empty")}</div>`}</div></div></section><div class="section" id="matches"><div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("matches")}</span></div><div class="toolbar"><button class="input" data-action="prev">${t("previous")}</button><button class="input" data-action="today">${t("todayBtn")}</button><button class="input" data-action="next">${t("next")}</button><input class="input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}"><select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select></div>${state.error&&!state.matches.length?`<div class="card">${esc(state.error)} <button class="input" data-action="refresh">${t("retry")}</button></div>`:""}${state.loading&&!state.matches.length?`<div class="card">${t("loading")}</div>`:""}${!state.loading&&!state.error&&!rows.length?`<div class="card">${state.query?t("noSearch"):t("empty")}</div>`:""}${state.usingCache?`<div class="ad-slot">${t("cached")} — ${t("freeApi")}</div>`:""}</div>${rows.length?`<div id="leagues">${groupCards(rows)}</div>`:""}<section class="section" id="standings"><div class="section-head"><div><small>${t("standings")}</small><h2>${t("standings")}</h2></div></div><div class="card">${state.lang==="ar"?"قسم الترتيب جاهز للربط ببيانات الترتيب من الـ API.":"Standings section is ready for API standings data."}</div></section>`;main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{const a=b.dataset.action;if(a==="prev"||a==="next"){state.date=shiftDate(state.date,a==="next"?1:-1);state.matches=[];load()}else if(a==="today"){state.date=localDate();state.matches=[];load()}else load({force:true})});const search=main.querySelector("#searchInput");if(search)search.oninput=e=>{state.query=e.target.value;render()};const filter=main.querySelector("#filter");if(filter){filter.value=state.filter;filter.onchange=e=>{state.filter=e.target.value;render()}}}
+function render(){
+  const main=document.getElementById("main");
+  if(!main)return;
+  document.documentElement.lang=state.lang;
+  document.documentElement.dir=state.lang==="ar"?"rtl":"ltr";
+  document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark";
+  document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";
+  const rows=visible();
+  const featured=rows[0];
+  main.innerHTML=`
+    <section class="hero" id="home">
+      <div class="hero-grid">
+        <div>
+          <small>${t("heroEyebrow")}</small>
+          <h1>${t("heroTitle")}</h1>
+          <p>${t("heroDesc")}</p>
+          <div class="toolbar">
+            <button class="input" data-action="today">${t("todayBtn")}</button>
+            <button class="input" data-action="refresh">${state.loading?t("loading"):t("retry")}</button>
+          </div>
+        </div>
+        <div class="featured">
+          ${featured?`
+            <div class="match-meta"><span>${esc(featured.league?.name||"")}</span><span>${esc(dateLabel(state.date))}</span></div>
+            <div class="featured-teams">
+              <div>${featured.home?.logo?`<img class="team-logo" src="${esc(featured.home.logo)}" alt="">`:""}<div>${esc(featured.home?.name||"—")}</div></div>
+              <div><div class="score-big">${featured.goals?.home==null&&featured.goals?.away==null?"—":`${featured.goals?.home??0} - ${featured.goals?.away??0}`}</div><span>${esc(status(featured))}</span></div>
+              <div>${featured.away?.logo?`<img class="team-logo" src="${esc(featured.away.logo)}" alt="">`:""}<div>${esc(featured.away?.name||"—")}</div></div>
+            </div>`
+          :`<div style="min-height:130px;display:grid;place-items:center">${t("empty")}</div>`}
+        </div>
+      </div>
+    </section>
+    ${importantCards(rows)}
+    <div class="section" id="matches">
+      <div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("matches")}</span></div>
+      <div class="date-switcher" role="group" aria-label="${state.lang==="ar"?"اختيار التاريخ":"Date selector"}">
+        <button class="date-btn ${state.date===shiftDate(localDate(),-1)?"active":""}" data-action="prev">${t("previous")}</button>
+        <button class="date-btn ${state.date===localDate()?"active":""}" data-action="today">${t("todayBtn")}</button>
+        <button class="date-btn ${state.date===shiftDate(localDate(),1)?"active":""}" data-action="next">${t("next")}</button>
+      </div>
+      <div class="toolbar match-tools">
+        <input class="input search-input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}">
+        <select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select>
+      </div>
+      ${state.error&&!state.matches.length?`<div class="card">${esc(state.error)} <button class="input" data-action="refresh">${t("retry")}</button></div>`:""}
+      ${state.loading&&!state.matches.length?`<div class="card">${t("loading")}</div>`:""}
+      ${!state.loading&&!state.error&&!rows.length?`<div class="card">${state.query?t("noSearch"):t("empty")}</div>`:""}
+    </div>
+    ${rows.length?`<div id="leagues">${groupCards(rows)}</div>`:""}`;
+  main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{
+    const a=b.dataset.action;
+    if(a==="prev"||a==="next"){state.date=shiftDate(state.date,a==="next"?1:-1);state.matches=[];load()}
+    else if(a==="today"){state.date=localDate();state.matches=[];load()}
+    else load({force:true});
+  });
+  const search=main.querySelector("#searchInput");
+  if(search)search.oninput=e=>{state.query=e.target.value;render()};
+  const filter=main.querySelector("#filter");
+  if(filter){filter.value=state.filter;filter.onchange=e=>{state.filter=e.target.value;render()}}
+}
 document.getElementById("themeBtn")?.addEventListener("click",()=>{const next=(document.documentElement.dataset.theme||"dark")==="dark"?"light":"dark";document.documentElement.dataset.theme=next;localStorage.setItem("theme",next)});
 document.getElementById("searchBtn")?.addEventListener("click",()=>document.getElementById("searchInput")?.focus());
 function navigateRoute(route){
