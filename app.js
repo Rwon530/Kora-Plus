@@ -1,37 +1,424 @@
-/* Kora Plus - UI layer. API access remains in api.js -> Cloudflare Worker. */
-const DICT={
-  ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات في واجهة بسيطة وسريعة.",today:"مباريات اليوم",live:"مباشر",scheduled:"لم تبدأ",finished:"انتهت",all:"الكل",loading:"جاري تحميل المباريات...",empty:"لا توجد مباريات في هذا اليوم",error:"تعذر تحميل المباريات",retry:"إعادة المحاولة",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",noSearch:"لا توجد نتائج مطابقة للبحث.",venue:"الملعب",important:"أهم المباريات",importantSub:"اختيارات اليوم",importantLeagues:"البطولات المهمة",count:"مباراة",cached:"بيانات محفوظة مؤقتاً"},
-  en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Live scores and major football competitions in a clean, fast interface.",today:"Today's Matches",live:"Live",scheduled:"Upcoming",finished:"Finished",all:"All",loading:"Loading matches...",empty:"No matches on this day",error:"Unable to load matches",retry:"Retry",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",noSearch:"No matching results.",venue:"Venue",important:"Important Matches",importantSub:"Today's picks",importantLeagues:"Top competitions",count:"matches",cached:"Cached data"}
+/* ---------------- i18n ---------------- */
+const DICT = {
+  ar: {
+    brand: "كورة لايف",
+    eyebrow_hero: "لوحة النتائج المباشرة",
+    hero_title: "نتائج مباريات كرة القدم، لحظة بلحظة.",
+    hero_desc: "تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي موثوق.",
+    hero_stat_label: "مباراة اليوم",
+    live_now: "مباراة مباشرة الآن",
+    date_label: "التاريخ",
+    today: "اليوم",
+    search_placeholder: "ابحث عن فريق...",
+    section_eyebrow: "مركز المباريات",
+    section_title: "مباريات اليوم",
+    filter_all: "الكل",
+    filter_live: "مباشر",
+    filter_scheduled: "لم تبدأ",
+    filter_finished: "انتهت",
+    state_loading: "جاري تحميل المباريات...",
+    state_empty: "لا توجد مباريات مطابقة لهذا البحث أو الفلتر.",
+    state_empty_favorites: "مفيش بطولات مفضلة لسه. دوس على ⭐ جنب أي بطولة عشان تضيفها.",
+    scope_all: "الكل",
+    scope_favorites: "المفضلة",
+    scope_top: "أهم المباريات",
+    state_error: "تعذّر تحميل المباريات، حاول مرة أخرى.",
+    status_live: "مباشر",
+    status_finished: "انتهت",
+    venue_label: "الملعب",
+    referee_label: "الحكم",
+    footer_tag: "منصة نتائج مباريات كرة القدم مباشرة",
+    theme_toggle: "تبديل المظهر",
+    lang_toggle: "English",
+    league_fallback: "بطولة",
+    team_fallback: "الفريق",
+  },
+  en: {
+    brand: "Kora Live",
+    eyebrow_hero: "LIVE SCOREBOARD",
+    hero_title: "Football scores, live.",
+    hero_desc: "Follow today's fixtures and live scores from a trusted sports data source.",
+    hero_stat_label: "matches today",
+    live_now: "matches live now",
+    date_label: "Date",
+    today: "Today",
+    search_placeholder: "Search a team...",
+    section_eyebrow: "MATCH CENTER",
+    section_title: "Today's Fixtures",
+    filter_all: "All",
+    filter_live: "Live",
+    filter_scheduled: "Upcoming",
+    filter_finished: "Finished",
+    state_loading: "Loading fixtures…",
+    state_empty: "No matches for this search or filter.",
+    state_empty_favorites: "No favorite leagues yet. Tap ⭐ next to a league to add it.",
+    scope_all: "All",
+    scope_favorites: "Favorites",
+    scope_top: "Top matches",
+    state_error: "Couldn't load fixtures, please try again.",
+    status_live: "LIVE",
+    status_finished: "FT",
+    venue_label: "Venue",
+    referee_label: "Referee",
+    footer_tag: "Live football scores platform",
+    theme_toggle: "Toggle theme",
+    lang_toggle: "العربية",
+    league_fallback: "League",
+    team_fallback: "Team",
+  }
 };
-const TOP=new Set([2,3,848,39,40,140,141,135,136,78,79,61,62,88,94,203,307,233,1,4,9,32]);
-const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false,requestId:0};
-const t=k=>(DICT[state.lang]||DICT.ar)[k]||k;
-function localDate(d=new Date()){const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);const g=x=>p.find(v=>v.type===x)?.value;return `${g("year")}-${g("month")}-${g("day")}`}
-function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
-function dateLabel(date){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",weekday:"long",day:"numeric",month:"long"}).format(new Date(`${date}T12:00:00`))}
-function shortDate(date){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",weekday:"short",day:"numeric",month:"short"}).format(new Date(`${date}T12:00:00`))}
-function timeLabel(iso){return new Intl.DateTimeFormat(state.lang==="ar"?"ar-EG":"en-GB",{timeZone:"Africa/Cairo",hour:"2-digit",minute:"2-digit"}).format(new Date(iso))}
-function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
-function typeOf(s){if(["1H","2H","ET","BT","P","LIVE","HT","INT"].includes(s))return"live";if(["FT","AET","PEN","AWD","WO","CANC","ABD"].includes(s))return"finished";return"scheduled"}
-function statusText(m){const type=typeOf(m?.status?.short);if(type==="live")return m?.status?.elapsed?`${m.status.elapsed}' ${t("live")}`:`● ${t("live")}`;if(type==="finished")return t("finished");return m?.date?timeLabel(m.date):"—"}
-function normalizeMatch(raw={}){const fixture=raw.fixture||{};const teams=raw.teams||{};const league=raw.league||{};const goals=raw.goals||{};return {...raw,id:raw.id??fixture.id,date:raw.date??fixture.date,status:(raw.status??fixture.status??{}),home:raw.home??teams.home??{},away:raw.away??teams.away??{},goals,league,venue:raw.venue??fixture.venue,referee:raw.referee??fixture.referee}}
-function cacheKey(date){return `kora-free-fixtures:${date}`}
-function cached(date){try{const x=JSON.parse(localStorage.getItem(cacheKey(date))||"null");return Array.isArray(x?.data)?x.data.map(normalizeMatch):null}catch{return null}}
-function save(date,data){try{localStorage.setItem(cacheKey(date),JSON.stringify({time:Date.now(),data}))}catch{}}
-let apiPromise;function api(){return apiPromise||(apiPromise=import("./api.js").then(m=>m.api))}
-function setDate(date){state.date=date;state.matches=[];state.error="";state.usingCache=false;const old=cached(date);if(old?.length){state.matches=old;state.usingCache=true}render();load()}
-async function load({force=false}={}){const requestId=++state.requestId;const requestedDate=state.date;state.loading=true;state.error="";render();try{const client=await api();const data=await client.getFixtures({date:requestedDate},{force});if(requestId!==state.requestId||requestedDate!==state.date)return;const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);state.matches=rows;state.usingCache=false;if(rows.length)save(requestedDate,rows)}catch(e){if(requestId!==state.requestId||requestedDate!==state.date)return;if(!state.matches.length)state.error=e?.message||t("error")}finally{if(requestId===state.requestId){state.loading=false;render()}}}
-function visible(){const q=state.query.trim().toLowerCase();return state.matches.filter(m=>{const typ=typeOf(m?.status?.short);const text=[m?.home?.name,m?.away?.name,m?.league?.name,m?.league?.country].join(" ").toLowerCase();return(state.filter==="all"||typ===state.filter)&&(!q||text.includes(q))})}
-function logo(url){return url?`<img class="team-logo" src="${esc(url)}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'">`:``}
-function matchCard(m,important=false){const home=m?.home||{},away=m?.away||{},typ=typeOf(m?.status?.short),gh=m?.goals?.home,ga=m?.goals?.away;const score=gh==null&&ga==null?"—":`${gh??0} - ${ga??0}`;return `<article class="card match-card ${important?"important-card":""}"><div class="match-meta"><span>${esc(m?.league?.name||"—")}</span><span class="status ${typ==="live"?"live":typ==="finished"?"done":""}">${esc(statusText(m))}</span></div><div class="match-teams"><div class="match-team">${logo(home.logo)}<div class="team-name">${esc(home.name||"—")}</div></div><div><div class="match-score">${score}</div><span class="match-score-status">${typ==="scheduled"?esc(statusText(m)):typ==="live"?t("live"):t("finished")}</span></div><div class="match-team">${logo(away.logo)}<div class="team-name">${esc(away.name||"—")}</div></div></div>${m?.venue?.name?`<div class="match-detail"><span>${t("venue")}</span><span>${esc(m.venue.name)}</span></div>`:""}</article>`}
-function importantRows(rows){return [...rows].filter(m=>TOP.has(Number(m?.league?.id))||typeOf(m?.status?.short)==="live").sort((a,b)=>{const la=typeOf(a?.status?.short)==="live"?0:1,lb=typeOf(b?.status?.short)==="live"?0:1;if(la!==lb)return la-lb;const ta=TOP.has(Number(a?.league?.id))?0:1,tb=TOP.has(Number(b?.league?.id))?0:1;if(ta!==tb)return ta-tb;return new Date(a?.date||0)-new Date(b?.date||0)}).slice(0,8)}
-function importantSection(rows){const items=importantRows(rows);return `<section class="section" id="important"><div class="section-head"><div><small>${t("importantSub")}</small><h2>${t("important")}</h2></div><span class="link">${items.length}</span></div>${items.length?`<div class="important-grid">${items.map(m=>matchCard(m,true)).join("")}</div>`:`<div class="card empty">${t("empty")}</div>`}</section>`}
-function leagueChips(rows){const map=new Map();rows.forEach(m=>{const id=Number(m?.league?.id||0);if(!map.has(id))map.set(id,{name:m?.league?.name||"—",country:m?.league?.country||"",count:0});map.get(id).count++});const list=[...map.values()].sort((a,b)=>b.count-a.count).slice(0,10);if(!list.length)return"";return `<section class="section" id="leagues"><div class="league-title"><h3>${t("importantLeagues")}</h3><span>${list.length}</span></div><div class="important-leagues">${list.map(x=>`<div class="league-chip">${esc(x.name)} <strong>${x.count}</strong></div>`).join("")}</div></section>`}
-function groupCards(rows){const groups=new Map();rows.forEach(m=>{const k=`${m?.league?.id||0}-${m?.league?.name||""}`;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(m)});return [...groups.values()].sort((a,b)=>(TOP.has(Number(a[0]?.league?.id))?0:1)-(TOP.has(Number(b[0]?.league?.id))?0:1)).map(g=>`<section class="league-section"><div class="league-title"><h3>${esc(g[0]?.league?.name||t("matches"))}</h3><span>${esc(g[0]?.league?.country||"")}</span></div><div class="grid grid-3">${g.map(m=>matchCard(m)).join("")}</div></section>`).join("")}
-function skeleton(){return `<div class="skeleton-grid">${Array.from({length:3},()=>`<div class="skeleton skel-card"></div>`).join("")}</div>`}
-function stateBox(){if(state.loading&&!state.matches.length)return skeleton();if(state.error&&!state.matches.length)return `<div class="card state error-box"><div><strong>${esc(t("error"))}</strong><div>${esc(state.error)}</div><button class="retry-btn" data-action="refresh">${t("retry")}</button></div></div>`;if(!state.loading&&!state.matches.length)return `<div class="card state"><div><strong>${state.query?t("noSearch"):t("empty")}</strong>${!state.query?`<button class="retry-btn" data-action="today">${t("todayBtn")}</button>`:""}</div></div>`;return""}
-function render(){const main=document.getElementById("main");if(!main)return;document.documentElement.lang=state.lang;document.documentElement.dir=state.lang==="ar"?"rtl":"ltr";document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark";document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";const rows=visible();const featured=importantRows(rows)[0]||rows[0];const today=localDate();const prevActive=state.date<today,nextActive=state.date>today;main.innerHTML=`<section class="hero" id="home"><div class="hero-grid"><div><small>${t("heroEyebrow")}</small><h1>${t("heroTitle")}</h1><p>${t("heroDesc")}</p><div class="hero-actions"><button class="control" data-action="today">${t("todayBtn")}</button><button class="control" data-action="refresh">${state.loading?t("loading"):t("retry")}</button></div></div><div class="featured">${featured?`<div class="match-meta"><span>${esc(featured.league?.name||"")}</span><span>${esc(dateLabel(state.date))}</span></div><div class="featured-teams"><div class="featured-team">${logo(featured.home?.logo)}<div class="team-name">${esc(featured.home?.name||"—")}</div></div><div><div class="score-big">${featured.goals?.home==null&&featured.goals?.away==null?"—":`${featured.goals?.home??0} - ${featured.goals?.away??0}`}</div><span class="featured-status ${typeOf(featured.status?.short)==="live"?"live":""}">${esc(statusText(featured))}</span></div><div class="featured-team">${logo(featured.away?.logo)}<div class="team-name">${esc(featured.away?.name||"—")}</div></div></div>`:`<div class="empty">${state.loading?t("loading"):t("empty")}</div>`}</div></div></section><div class="date-nav" role="tablist" aria-label="اختيار اليوم"><button class="date-btn ${prevActive?"active":""}" data-action="prev">${t("previous")}</button><button class="date-btn ${state.date===today?"active":""}" data-action="today">${t("todayBtn")}</button><button class="date-btn ${nextActive?"active":""}" data-action="next">${t("next")}</button></div><div class="date-label">${esc(dateLabel(state.date))}</div>${importantSection(rows)}<div class="ad-slot">مساحة إعلانية — أعلى الصفحة</div><section class="section" id="matches"><div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("count")}</span></div><div class="toolbar"><button class="control" data-action="prev">${t("previous")}</button><button class="control" data-action="today">${t("todayBtn")}</button><button class="control" data-action="next">${t("next")}</button></div><div class="search-row"><input class="search-input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}"><select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select></div>${state.usingCache&&!state.loading?`<div class="date-label">${t("cached")}</div>`:""}${state.loading&&state.matches.length?`<div class="date-label">${t("loading")}</div>`:""}${state.matches.length?groupCards(rows):stateBox()}</section>${rows.length?leagueChips(rows):""}`;bindActions();updateNav()}
-function bindActions(){const main=document.getElementById("main");main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{const a=b.dataset.action;if(a==="prev")setDate(shiftDate(state.date,-1));else if(a==="next")setDate(shiftDate(state.date,1));else if(a==="today")setDate(localDate());else load({force:true})});const search=main.querySelector("#searchInput");if(search)search.oninput=e=>{state.query=e.target.value;render();const el=document.getElementById("searchInput");if(el){el.focus();el.setSelectionRange(state.query.length,state.query.length)}};const filter=main.querySelector("#filter");if(filter){filter.value=state.filter;filter.onchange=e=>{state.filter=e.target.value;render()}}}
-function updateNav(){const current=location.hash.replace("#","")||"home";document.querySelectorAll("[data-route]").forEach(a=>a.classList.toggle("active",a.dataset.route===current));}
-function navigateRoute(route){if(route==="home")window.scrollTo({top:0,behavior:"smooth"});else if(route==="matches")document.getElementById("matches")?.scrollIntoView({behavior:"smooth",block:"start"});else if(route==="leagues")document.getElementById("leagues")?.scrollIntoView({behavior:"smooth",block:"start"});else if(route==="search"){document.getElementById("searchInput")?.scrollIntoView({behavior:"smooth",block:"center"});setTimeout(()=>document.getElementById("searchInput")?.focus(),300)}updateNav()}
-document.querySelectorAll("[data-route]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();navigateRoute(a.dataset.route)}));window.addEventListener("hashchange",()=>navigateRoute(location.hash.replace("#","")||"home"));document.getElementById("themeBtn")?.addEventListener("click",()=>{const next=(document.documentElement.dataset.theme||"dark")==="dark"?"light":"dark";document.documentElement.dataset.theme=next;localStorage.setItem("theme",next)});document.getElementById("searchBtn")?.addEventListener("click",()=>navigateRoute("search"));if(!localStorage.getItem("theme"))localStorage.setItem("theme","dark");window.addEventListener("online",()=>load({force:true}));load();setInterval(()=>{if(state.date===localDate())load({force:true})},1800000);
+
+const TOP_LEAGUE_IDS = [
+  2, 3, 848,       // UEFA Champions League, Europa League, Conference League
+  39, 40,          // Premier League, Championship
+  140, 141,        // La Liga, La Liga 2
+  135, 136,        // Serie A, Serie B
+  78, 79,          // Bundesliga, 2. Bundesliga
+  61, 62,          // Ligue 1, Ligue 2
+  88, 94, 203,     // Eredivisie, Primeira Liga, Super Lig
+  307,             // Saudi Pro League
+  233,             // Egyptian Premier League
+  1, 4, 9, 32      // World Cup, Euro, Copa America, World Cup Qualifiers
+];
+
+const state = {
+  lang: localStorage.getItem("lang") || "ar",
+  date: localDate(),
+  filter: "all",
+  scope: "all",
+  query: "",
+  matches: [],
+  favLeagues: JSON.parse(localStorage.getItem("favLeagues") || "[]")
+};
+
+function t(key) {
+  return DICT[state.lang][key] || DICT.ar[key] || key;
+}
+
+function applyLang() {
+  const dir = state.lang === "ar" ? "rtl" : "ltr";
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = dir;
+  document.title = state.lang === "ar"
+    ? "كورة لايف | نتائج مباريات كرة القدم"
+    : "Kora Live | Football Scores";
+
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-aria]").forEach(el => {
+    el.setAttribute("aria-label", t(el.dataset.i18nAria));
+  });
+
+  document.getElementById("selectedDate").textContent = formatDate(state.date);
+  updateDateButtons();
+}
+
+/* ---------------- Date helpers ---------------- */
+function localDate(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(d);
+  const get = t => parts.find(x => x.type === t).value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function shiftDate(date, days) {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDate(date) {
+  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long"
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+function updateDateButtons() {
+  const prev = document.querySelector("#prevDay small");
+  const next = document.querySelector("#nextDay small");
+  if (prev) prev.textContent = formatShortDate(shiftDate(state.date,-1));
+  if (next) next.textContent = formatShortDate(shiftDate(state.date,1));
+  const today = document.getElementById("todayBtn");
+  today.classList.toggle("active", state.date === localDate());
+  document.getElementById("prevDay").classList.toggle("active", state.date !== localDate());
+  document.getElementById("nextDay").classList.toggle("active", false);
+}
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat(state.lang === "ar" ? "ar-EG" : "en-GB", {timeZone:"Africa/Cairo",day:"numeric",month:"short"}).format(new Date(`${date}T12:00:00`));
+}
+
+function formatTime(iso) {
+  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit"
+  }).format(new Date(iso));
+}
+
+/* ---------------- Utils ---------------- */
+function esc(s = "") {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[c]));
+}
+
+function statusType(s) {
+  const live = ["1H", "2H", "ET", "BT", "P", "LIVE", "HT"];
+  const finished = ["FT", "AET", "PEN", "AWD", "WO", "CANC", "ABD"];
+  if (live.includes(s)) return "live";
+  if (finished.includes(s)) return "finished";
+  return "scheduled";
+}
+
+function statusLabel(m) {
+  const type = statusType(m.status.short);
+  if (type === "live") return `● ${m.status.elapsed ? m.status.elapsed + "'" : t("status_live")}`;
+  if (type === "finished") return t("status_finished");
+  return formatTime(m.date);
+}
+
+/* ---------------- Data loading ---------------- */
+let apiClientPromise;
+function getApiClient() {
+  return apiClientPromise || (apiClientPromise = import("./api.js").then(m => m.api));
+}
+
+async function loadMatches(options = {}) {
+  const stateEl = document.getElementById("state");
+  const hadMatches = state.matches.length > 0;
+  const requestedDate = state.date;
+
+  // Do not clear the existing cards while refreshing.
+  if (!hadMatches) {
+    stateEl.textContent = t("state_loading");
+    stateEl.style.display = "block";
+  }
+
+  try {
+    const api = await getApiClient();
+    const data = await api.getFixtures({ date: requestedDate }, { force: options.force === true });
+    const freshMatches = Array.isArray(data?.response)
+      ? data.response
+      : Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+    // A temporary empty response must not erase already displayed data
+    // during an automatic refresh of the same date.
+    if (freshMatches.length === 0 && hadMatches && requestedDate === state.date && !options.allowEmptyReplace) {
+      stateEl.style.display = "none";
+      return;
+    }
+
+    state.matches = freshMatches;
+    document.getElementById("selectedDate").textContent = formatDate(state.date);
+    document.getElementById("matchCount").textContent = state.matches.length.toLocaleString("en-US");
+
+    const liveCount = state.matches.filter(m => statusType(m.status.short) === "live").length;
+    const liveBadge = document.getElementById("liveBadge");
+    if (liveBadge) {
+      liveBadge.hidden = liveCount === 0;
+      const liveCountEl = document.getElementById("liveCount");
+      if (liveCountEl) liveCountEl.textContent = liveCount.toLocaleString("en-US");
+    }
+
+    render();
+    updateDateButtons();
+  } catch (e) {
+    // Keep the last successful state. api.js already falls back to its
+    // persistent cache, so this is only reached when no cached data exists.
+    if (hadMatches) {
+      stateEl.style.display = "none";
+      console.warn("Kora Plus: refresh failed; keeping previous matches", e);
+      return;
+    }
+    stateEl.textContent = e.message || t("state_error");
+    stateEl.style.display = "block";
+  }
+}
+
+/* ---------------- Render ---------------- */
+function render() {
+  const grid = document.getElementById("matchesGrid");
+  const stateEl = document.getElementById("state");
+  const q = state.query.trim().toLowerCase();
+
+  let list = state.matches.filter(m => {
+    const type = statusType(m.status.short);
+    const matchesFilter = state.filter === "all" || state.filter === type;
+    const matchesQuery = !q ||
+      (m.home.name || "").toLowerCase().includes(q) ||
+      (m.away.name || "").toLowerCase().includes(q);
+    const matchesScope =
+      state.scope === "all" ? true :
+      state.scope === "favorites" ? state.favLeagues.includes(m.league.id) :
+      state.scope === "top" ? TOP_LEAGUE_IDS.includes(m.league.id) : true;
+    return matchesFilter && matchesQuery && matchesScope;
+  });
+
+  renderTopMatches(list);
+  if (!list.length) {
+    grid.innerHTML = "";
+    stateEl.textContent = (state.scope === "favorites" && !state.favLeagues.length)
+      ? t("state_empty_favorites")
+      : t("state_empty");
+    stateEl.style.display = "block";
+    return;
+  }
+  stateEl.style.display = "none";
+
+  const groups = new Map();
+  for (const m of list) {
+    const key = `${m.league.id}-${m.league.name}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+
+  const sortedGroups = [...groups.values()].sort((a, b) => {
+    const aFav = state.favLeagues.includes(a[0].league.id) ? 0 : 1;
+    const bFav = state.favLeagues.includes(b[0].league.id) ? 0 : 1;
+    return aFav - bFav;
+  });
+
+  grid.innerHTML = sortedGroups.map(group => {
+    const league = group[0].league;
+    const isFav = state.favLeagues.includes(league.id);
+    return `
+      <article class="league-card">
+        <div class="league-head">
+          ${league.logo ? `<img src="${esc(league.logo)}" alt="" loading="lazy">` : ""}
+          <div class="league-names">
+            <strong>${esc(league.name || t("league_fallback"))}</strong>
+            <small>${esc(league.country || "")}</small>
+          </div>
+          <button class="fav-btn ${isFav ? "active" : ""}" data-league="${league.id}" aria-label="favorite">★</button>
+        </div>
+        ${group.map(matchRow).join("")}
+      </article>
+    `;
+  }).join("");
+
+  grid.querySelectorAll(".fav-btn").forEach(btn => {
+    btn.onclick = () => {
+      const id = Number(btn.dataset.league);
+      const idx = state.favLeagues.indexOf(id);
+      if (idx === -1) state.favLeagues.push(id); else state.favLeagues.splice(idx, 1);
+      localStorage.setItem("favLeagues", JSON.stringify(state.favLeagues));
+      render();
+    };
+  });
+}
+
+
+function renderTopMatches(list) {
+  const el = document.getElementById("topMatches");
+  if (!el) return;
+  const top = [...list].sort((a,b) => {
+    const av = statusType(a.status.short)==="live" ? 0 : 1;
+    const bv = statusType(b.status.short)==="live" ? 0 : 1;
+    return av-bv;
+  }).slice(0,3);
+  if (!top.length) {
+    el.innerHTML = `<div class="state">لا توجد مباريات متاحة حاليًا</div>`;
+    return;
+  }
+  el.innerHTML = top.map(m => {
+    const type=statusType(m.status.short);
+    const score=(m.goals.home==null&&m.goals.away==null)?"—":`${m.goals.home??0} - ${m.goals.away??0}`;
+    return `<article class="featured-match"><div class="featured-league"><span>${esc(m.league.name||"بطولة")}</span>${type==="live"?'<span class="live-pill">LIVE</span>':''}</div><div class="featured-teams"><div class="featured-team">${m.home.logo?`<img src="${esc(m.home.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.home.name||t("team_fallback"))}</strong></div><div class="featured-score"><strong>${score}</strong><small>${statusLabel(m)}</small></div><div class="featured-team">${m.away.logo?`<img src="${esc(m.away.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.away.name||t("team_fallback"))}</strong></div></div><div class="featured-venue">${esc(m.venue?.name||"")}</div></article>`;
+  }).join("");
+}
+
+function matchRow(m) {
+  const type = statusType(m.status.short);
+  const homeLogo = m.home.logo ? `<img src="${esc(m.home.logo)}" alt="" loading="lazy">` : "";
+  const awayLogo = m.away.logo ? `<img src="${esc(m.away.logo)}" alt="" loading="lazy">` : "";
+
+  const score = m.goals.home == null && m.goals.away == null
+    ? "—"
+    : `${m.goals.home ?? 0} - ${m.goals.away ?? 0}`;
+
+  const details = [];
+  if (m.venue && m.venue.name) details.push(`<span><b>${t("venue_label")}</b>${esc(m.venue.name)}</span>`);
+  if (m.referee) details.push(`<span><b>${t("referee_label")}</b>${esc(m.referee)}</span>`);
+
+  return `
+    <details class="match" data-id="${m.id}">
+      <summary>
+        <div class="side home">
+          <span class="team-name">${esc(m.home.name || t("team_fallback"))}</span>
+          ${homeLogo}
+        </div>
+        <div class="score-box">
+          <span class="score">${score}</span>
+          <span class="status ${type}">${statusLabel(m)}</span>
+        </div>
+        <div class="side away">
+          ${awayLogo}
+          <span class="team-name">${esc(m.away.name || t("team_fallback"))}</span>
+        </div>
+      </summary>
+      ${details.length ? `<div class="match-detail">${details.join("")}</div>` : ""}
+    </details>
+  `;
+}
+
+/* ---------------- Events ---------------- */
+document.getElementById("prevDay").onclick = () => { state.date = shiftDate(state.date, -1); updateDateButtons(); loadMatches({allowEmptyReplace:true}); };
+document.getElementById("nextDay").onclick = () => { state.date = shiftDate(state.date, 1); updateDateButtons(); loadMatches({allowEmptyReplace:true}); };
+document.getElementById("todayBtn").onclick = () => { state.date = localDate(); updateDateButtons(); loadMatches({allowEmptyReplace:true}); };
+
+document.querySelectorAll(".scope").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".scope").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.scope = btn.dataset.scope;
+    render();
+  };
+});
+
+document.querySelectorAll(".filter").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".filter").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.filter = btn.dataset.filter;
+    render();
+  };
+});
+
+let searchTimer;
+document.getElementById("searchInput").oninput = (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.query = e.target.value; render(); }, 150);
+};
+
+document.getElementById("searchBtn").onclick = () => { document.getElementById("searchInput")?.focus(); document.getElementById("searchInput")?.scrollIntoView({behavior:"smooth",block:"center"}); };
+document.getElementById("bottomSearch")?.addEventListener("click", e => { e.preventDefault(); document.getElementById("searchInput")?.focus(); document.getElementById("searchInput")?.scrollIntoView({behavior:"smooth",block:"center"}); });
+document.getElementById("themeBtn").onclick = () => {
+  document.documentElement.classList.toggle("dark");
+  localStorage.setItem("dark", document.documentElement.classList.contains("dark") ? "1" : "0");
+};
+if (localStorage.getItem("dark") === "1") document.documentElement.classList.add("dark");
+
+document.getElementById("langBtn").onclick = () => {
+  state.lang = state.lang === "ar" ? "en" : "ar";
+  localStorage.setItem("lang", state.lang);
+  applyLang();
+  render();
+};
+
+/* ---------------- Init ---------------- */
+applyLang();
+updateDateButtons();
+loadMatches();
+
+// Gentle auto-refresh for live matches on today's view.
+setInterval(() => {
+  if (state.date === localDate()) loadMatches();
+}, 1800000);

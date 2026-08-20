@@ -1,42 +1,76 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>كورة بلس | نتائج ومباريات كرة القدم</title>
-  <meta name="description" content="كورة بلس — نتائج ومباريات كرة القدم المباشرة.">
-  <meta name="theme-color" content="#07111f">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050b14">
+<title>كورة بلس | مباريات ونتائج كرة القدم</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
-      <a class="brand" href="#home" data-route="home" aria-label="كورة بلس">
-        <span class="brand-mark">K+</span>
-        <span><b>كورة</b> بلس</span>
-      </a>
-      <nav class="desktop-nav" aria-label="التنقل الرئيسي">
-        <a href="#home" data-route="home">الرئيسية</a>
-        <a href="#matches" data-route="matches">المباريات</a>
-        <a href="#leagues" data-route="leagues">البطولات</a>
-        <a href="#search" data-route="search">بحث</a>
-      </nav>
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#home" aria-label="كورة بلس"><span>كورة</span> <b>بلس</b></a>
       <div class="top-actions">
-        <button class="icon-btn" id="searchBtn" title="بحث" aria-label="بحث">⌕</button>
-        <button class="icon-btn" id="themeBtn" title="تبديل المظهر" aria-label="تبديل المظهر">◐</button>
+        <button class="icon-btn" id="searchBtn" aria-label="بحث">⌕</button>
+        <button class="icon-btn" id="themeBtn" aria-label="الوضع الليلي">◐</button>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <main id="main"></main>
+  <main id="main" class="page">
+    <section class="date-nav" aria-label="اختيار اليوم">
+      <button id="nextDay"><strong>التالي</strong><small></small></button>
+      <button id="todayBtn" class="active"><strong>اليوم</strong><small id="selectedDate"></small></button>
+      <button id="prevDay"><strong>السابق</strong><small></small></button>
+    </section>
 
-    <nav class="bottom-nav" aria-label="تنقل الهاتف">
-      <a href="#home" data-route="home"><span>⌂</span><small>الرئيسية</small></a>
-      <a href="#matches" data-route="matches"><span>⚽</span><small>المباريات</small></a>
-      <a href="#leagues" data-route="leagues"><span>◈</span><small>البطولات</small></a>
-      <a href="#search" data-route="search"><span>⌕</span><small>بحث</small></a>
-    </nav>
-  </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="app.js" type="module"></script>
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">منصة كرة القدم</span>
+        <h1>كل المباريات. كل الدوريات.</h1>
+        <p>نتائج ومواعيد المباريات في مكان واحد، مع تحديثات مباشرة.</p>
+      </div>
+      <div class="hero-visual" aria-hidden="true"><span>⚽</span></div>
+    </section>
+
+    <section class="section top-section">
+      <div class="section-head"><div><span class="eyebrow">مختارة</span><h2>أهم المباريات</h2></div><button id="showAllTop" class="text-btn">عرض الكل</button></div>
+      <div id="topMatches" class="top-matches"></div>
+    </section>
+
+    <section class="section matches-section">
+      <div class="section-head">
+        <div><span class="eyebrow">مركز المباريات</span><h2>مباريات اليوم</h2></div>
+        <strong id="matchCount" class="count">0</strong>
+      </div>
+      <div class="controls">
+        <div class="filter-tabs">
+          <button class="filter active" data-filter="all">الكل</button>
+          <button class="filter" data-filter="live">مباشر</button>
+          <button class="filter" data-filter="scheduled">لم تبدأ</button>
+          <button class="filter" data-filter="finished">انتهت</button>
+        </div>
+        <div class="search-row"><input id="searchInput" placeholder="ابحث عن فريق أو بطولة..." autocomplete="off"><button class="scope active" data-scope="all">الكل</button></div>
+      </div>
+      <div id="state" class="state" hidden></div>
+      <div id="matchesGrid" class="matches-grid"></div>
+    </section>
+
+    <section class="section leagues-section">
+      <div class="section-head"><div><span class="eyebrow">الأكثر متابعة</span><h2>البطولات المهمة</h2></div></div>
+      <div class="league-chips"><span>دوري أبطال أوروبا</span><span>الدوري الإنجليزي</span><span>الدوري الإسباني</span><span>الدوري الإيطالي</span></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="التنقل">
+    <a href="#home" class="active"><span>⌂</span><small>الرئيسية</small></a>
+    <a href="#matches"><span>⚽</span><small>المباريات</small></a>
+    <a href="#leagues"><span>♜</span><small>البطولات</small></a>
+    <a href="#search" id="bottomSearch"><span>⌕</span><small>بحث</small></a>
+  </nav>
+</div>
+<script src="app.js" type="module"></script>
 </body>
 </html>
