@@ -4,3 +4,15 @@
 @media(min-width:1050px){.page{padding-top:28px}.hero{min-height:245px}.matches-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.page{width:calc(100% - 24px);padding-top:12px}.topbar-inner{width:calc(100% - 24px);height:62px}.hero{padding:24px 20px;min-height:205px}.hero-visual{display:none}.hero h1{font-size:31px}.hero p{font-size:14px}.top-matches{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px}.featured-match{min-width:86%;scroll-snap-align:start}.league-chips{grid-template-columns:repeat(2,1fr)}.bottom-nav a{flex:1;max-width:110px}.match summary{grid-template-columns:1fr 68px 1fr;padding:16px 10px}.side img{width:38px;height:38px}.team-name{font-size:12px}.score{font-size:19px}}
 @media(max-width:360px){.page{width:calc(100% - 16px)}.hero h1{font-size:27px}.date-nav strong{font-size:14px}.featured-match{min-width:92%}.bottom-nav small{font-size:9px}.match summary{grid-template-columns:1fr 60px 1fr}.side img{width:34px;height:34px}.team-name{font-size:11px}}
+
+/* All leagues directory */
+.league-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.league-directory-item{width:100%;display:flex;align-items:center;gap:10px;text-align:right;background:var(--card,#0d1928);border:1px solid rgba(148,163,184,.16);border-radius:16px;padding:11px;color:inherit;cursor:pointer;min-height:68px}
+.league-directory-item:active{transform:scale(.99)}
+.league-directory-logo{width:38px;height:38px;flex:0 0 38px;border-radius:11px;display:grid;place-items:center;background:#111f32;overflow:hidden;font-size:20px}
+.league-directory-logo img{width:100%;height:100%;object-fit:contain;padding:5px}
+.league-directory-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.league-directory-copy strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.league-directory-copy small{font-size:11px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.league-directory-item>b{font-size:11px;color:#5ea0ff}
+@media(max-width:430px){.league-list{grid-template-columns:1fr}.league-directory-item{min-height:62px}}

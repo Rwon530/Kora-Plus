@@ -176,6 +176,16 @@ function statusType(s) {
   return "scheduled";
 }
 
+function isFriendlyMatch(m) {
+  const text = `${m.league?.name || ""} ${m.league?.type || ""} ${m.league?.country || ""}`.toLowerCase();
+  return /friend|friendly|amistoso|amical|club friendly|international friendly|مباراة ودية|وديات/.test(text);
+}
+
+function displayLeagueName(m) {
+  if (isFriendlyMatch(m)) return state.lang === "ar" ? "مباريات ودية" : "Friendlies";
+  return m.league?.name || t("league_fallback");
+}
+
 function statusLabel(m) {
   const type = statusType(m.status.short);
   if (type === "live") return `● ${m.status.elapsed ? m.status.elapsed + "'" : t("status_live")}`;
@@ -263,6 +273,7 @@ function render() {
   });
 
   renderTopMatches(list);
+  renderLeagueDirectory(state.matches);
   if (!list.length) {
     grid.innerHTML = "";
     stateEl.textContent = (state.scope === "favorites" && !state.favLeagues.length)
@@ -275,7 +286,8 @@ function render() {
 
   const groups = new Map();
   for (const m of list) {
-    const key = `${m.league.id}-${m.league.name}`;
+    const leagueKey = isFriendlyMatch(m) ? "friendly" : `${m.league.id}`;
+    const key = `${leagueKey}-${displayLeagueName(m)}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(m);
   }
@@ -294,7 +306,7 @@ function render() {
         <div class="league-head">
           ${league.logo ? `<img src="${esc(league.logo)}" alt="" loading="lazy">` : ""}
           <div class="league-names">
-            <strong>${esc(league.name || t("league_fallback"))}</strong>
+            <strong>${esc(isFriendlyMatch(group[0]) ? (state.lang === "ar" ? "مباريات ودية" : "Friendlies") : (league.name || t("league_fallback")))}</strong>
             <small>${esc(league.country || "")}</small>
           </div>
           <button class="fav-btn ${isFav ? "active" : ""}" data-league="${league.id}" aria-label="favorite">★</button>
@@ -316,6 +328,84 @@ function render() {
 }
 
 
+function renderLeagueDirectory(allMatches) {
+  const el = document.getElementById("leagueList");
+  if (!el) return;
+  const groups = new Map();
+  for (const m of allMatches) {
+    const friendly = isFriendlyMatch(m);
+    const id = friendly ? "friendly" : String(m.league?.id ?? "unknown");
+    if (!groups.has(id)) {
+      groups.set(id, {
+        id,
+        name: friendly ? (state.lang === "ar" ? "مباريات ودية" : "Friendlies") : (m.league?.name || t("league_fallback")),
+        country: friendly ? (state.lang === "ar" ? "وديات" : "Friendlies") : (m.league?.country || ""),
+        logo: friendly ? "" : (m.league?.logo || ""),
+        count: 0
+      });
+    }
+    groups.get(id).count++;
+  }
+  const leagues = [...groups.values()].sort((a,b) => {
+    if (a.id === "friendly") return 1;
+    if (b.id === "friendly") return -1;
+    return b.count - a.count || a.name.localeCompare(b.name);
+  });
+  if (!leagues.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = leagues.map(l => `
+    <button class="league-directory-item" data-league-id="${esc(l.id)}">
+      <span class="league-directory-logo">${l.logo ? `<img src="${esc(l.logo)}" alt="" loading="lazy">` : "⚽"}</span>
+      <span class="league-directory-copy"><strong>${esc(l.name)}</strong><small>${esc(l.country)}</small></span>
+      <b>${l.count}</b>
+    </button>
+  `).join("");
+  el.querySelectorAll(".league-directory-item").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.leagueId;
+      state.scope = "all";
+      state.query = "";
+      const input = document.getElementById("searchInput");
+      if (input) input.value = "";
+      state.matches = state.matches;
+      if (id === "friendly") {
+        const friendly = state.matches.filter(isFriendlyMatch);
+        renderFilteredList(friendly);
+      } else {
+        const matches = state.matches.filter(m => String(m.league?.id) === id);
+        renderFilteredList(matches);
+      }
+      document.getElementById("matchesGrid")?.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  });
+}
+
+function renderFilteredList(list) {
+  const grid = document.getElementById("matchesGrid");
+  const stateEl = document.getElementById("state");
+  renderTopMatches(list);
+  if (!list.length) {
+    grid.innerHTML = "";
+    stateEl.textContent = t("state_empty");
+    stateEl.style.display = "block";
+    return;
+  }
+  stateEl.style.display = "none";
+  const groups = new Map();
+  list.forEach(m => {
+    const key = isFriendlyMatch(m) ? "friendly" : `${m.league?.id}-${m.league?.name}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  });
+  grid.innerHTML = [...groups.values()].map(group => {
+    const league = group[0].league || {};
+    const friendly = isFriendlyMatch(group[0]);
+    return `<article class="league-card"><div class="league-head">${league.logo && !friendly ? `<img src="${esc(league.logo)}" alt="" loading="lazy">` : ""}<div class="league-names"><strong>${esc(displayLeagueName(group[0]))}</strong><small>${esc(friendly ? (state.lang === "ar" ? "وديات" : "Friendlies") : (league.country || ""))}</small></div></div>${group.map(matchRow).join("")}</article>`;
+  }).join("");
+}
+
 function renderTopMatches(list) {
   const el = document.getElementById("topMatches");
   if (!el) return;
@@ -331,7 +421,7 @@ function renderTopMatches(list) {
   el.innerHTML = top.map(m => {
     const type=statusType(m.status.short);
     const score=(m.goals.home==null&&m.goals.away==null)?"—":`${m.goals.home??0} - ${m.goals.away??0}`;
-    return `<article class="featured-match"><div class="featured-league"><span>${esc(m.league.name||"بطولة")}</span>${type==="live"?'<span class="live-pill">LIVE</span>':''}</div><div class="featured-teams"><div class="featured-team">${m.home.logo?`<img src="${esc(m.home.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.home.name||t("team_fallback"))}</strong></div><div class="featured-score"><strong>${score}</strong><small>${statusLabel(m)}</small></div><div class="featured-team">${m.away.logo?`<img src="${esc(m.away.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.away.name||t("team_fallback"))}</strong></div></div><div class="featured-venue">${esc(m.venue?.name||"")}</div></article>`;
+    return `<article class="featured-match"><div class="featured-league"><span>${esc(displayLeagueName(m))}</span>${type==="live"?'<span class="live-pill">LIVE</span>':''}</div><div class="featured-teams"><div class="featured-team">${m.home.logo?`<img src="${esc(m.home.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.home.name||t("team_fallback"))}</strong></div><div class="featured-score"><strong>${score}</strong><small>${statusLabel(m)}</small></div><div class="featured-team">${m.away.logo?`<img src="${esc(m.away.logo)}" alt="" loading="lazy">`:''}<strong>${esc(m.away.name||t("team_fallback"))}</strong></div></div><div class="featured-venue">${esc(m.venue?.name||"")}</div></article>`;
   }).join("");
 }
 
