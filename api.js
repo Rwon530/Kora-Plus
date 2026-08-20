@@ -1,131 +1,119 @@
-/* API abstraction: frontend never sees the API-Football secret. */
 const CONFIG = Object.freeze({
   proxyBase: "/api",
   defaultTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo",
-  cacheTTL: {
-    fixtures: 30_000,
-    live: 15_000,
-    events: 15_000,
-    statistics: 60_000,
-    standings: 3_600_000,
-    leagues: 86_400_000,
-    teams: 86_400_000,
-    players: 86_400_000,
-    predictions: 3_600_000
-  }
+  cacheTTL: {fixtures:30000, live:15000, events:15000, statistics:60000, standings:3600000, leagues:86400000, teams:86400000, players:86400000, predictions:3600000},
+  staleMaxAge: {fixtures:86400000, live:600000, events:1800000, statistics:21600000, standings:604800000, leagues:2592000000, teams:2592000000, players:2592000000, predictions:172800000}
 });
 
 const memoryCache = new Map();
 const inflight = new Map();
 
-function keyFor(path, params = {}) {
-  const qs = new URLSearchParams();
+function keyFor(path, params={}) {
+  const q = new URLSearchParams();
   Object.keys(params).sort().forEach(k => {
-    const v = params[k];
-    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    const v=params[k];
+    if(v!==undefined && v!==null && v!=="") q.set(k,String(v));
   });
-  return `${path}?${qs.toString()}`;
+  return `${path}?${q}`;
 }
 
-async function request(path, params = {}, options = {}) {
-  const key = keyFor(path, params);
-  const ttl = options.ttl ?? 30_000;
-  const force = options.force === true;
-  const now = Date.now();
+function localRecord(key) {
+  try {
+    const r=JSON.parse(localStorage.getItem(`kp:${key}`)||"null");
+    return r && r.data && r.time ? r : null;
+  } catch { return null; }
+}
 
-  if (!force) {
-    const cached = memoryCache.get(key);
-    if (cached && now - cached.time < ttl) return cached.data;
+function save(key,data) {
+  const r={time:Date.now(),data};
+  memoryCache.set(key,r);
+  try { localStorage.setItem(`kp:${key}`,JSON.stringify(r)); } catch {}
+  return data;
+}
 
-    try {
-      const raw = localStorage.getItem(`kp:${key}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (now - parsed.time < ttl) {
-          memoryCache.set(key, parsed);
-          return parsed.data;
-        }
-      }
-    } catch {}
+function stale(path,key) {
+  const r=memoryCache.get(key)||localRecord(key);
+  if(!r) return null;
+  const max=CONFIG.staleMaxAge[path]??86400000;
+  if(Date.now()-r.time<=max) {
+    memoryCache.set(key,r);
+    return r.data;
+  }
+  return null;
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function fetchRetry(url) {
+  let last;
+  for(let i=0;i<3;i++){
+    try{
+      const res=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store"});
+      let body=null; try{body=await res.json();}catch{}
+      if(res.ok && !body?.error) return body;
+      const e=new Error(body?.error||`HTTP ${res.status}`); e.status=res.status; e.apiErrors=body?.errors;
+      last=e;
+      if(i<2 && [408,429,500,502,503,504].includes(res.status)){await sleep(700*(i+1));continue;}
+      throw e;
+    }catch(e){
+      last=e;
+      if(i<2 && !e.status){await sleep(700*(i+1));continue;}
+      throw e;
+    }
+  }
+  throw last||new Error("Request failed");
+}
+
+async function request(path,params={},options={}) {
+  const key=keyFor(path,params);
+  const ttl=options.ttl??30000;
+  const force=options.force===true;
+  const now=Date.now();
+
+  const m=memoryCache.get(key);
+  if(!force && m && now-m.time<ttl) return m.data;
+
+  if(!force){
+    const r=localRecord(key);
+    if(r){memoryCache.set(key,r); if(now-r.time<ttl) return r.data;}
   }
 
-  if (inflight.has(key)) return inflight.get(key);
+  if(inflight.has(key)) return inflight.get(key);
 
-  const promise = (async () => {
-    const qs = new URLSearchParams();
-    Object.entries({...params, timezone: params.timezone ?? CONFIG.defaultTimezone}).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") qs.set(k, v);
+  const promise=(async()=>{
+    const q=new URLSearchParams();
+    Object.entries({...params,timezone:params.timezone??CONFIG.defaultTimezone}).forEach(([k,v])=>{
+      if(v!==undefined && v!==null && v!=="") q.set(k,v);
     });
-
-    const response = await fetch(`${CONFIG.proxyBase}/${path}?${qs}`, {
-      headers: { "Accept": "application/json" }
-    });
-
-    let body = null;
-    try { body = await response.json(); } catch {}
-
-    if (!response.ok) {
-      const error = new Error(body?.error || `HTTP ${response.status}`);
-      error.status = response.status;
-      throw error;
+    try{
+      return save(key,await fetchRetry(`${CONFIG.proxyBase}/${path}?${q}`));
+    }catch(e){
+      const old=stale(path,key);
+      if(old) { console.warn("Using cached Kora Plus data:",path,e); return old; }
+      throw e;
     }
-    if (body?.error) {
-      const error = new Error(body.error);
-      error.apiErrors = body.errors;
-      error.status = body.status;
-      throw error;
-    }
-
-    const record = { time: now, data: body };
-    memoryCache.set(key, record);
-    try { localStorage.setItem(`kp:${key}`, JSON.stringify(record)); } catch {}
-    return body;
   })();
 
-  inflight.set(key, promise);
-  try { return await promise; } finally { inflight.delete(key); }
+  inflight.set(key,promise);
+  try{return await promise;}finally{inflight.delete(key);}
 }
 
-export const api = {
-  getLiveMatches: (params = {}, options = {}) =>
-    request("fixtures", { live: "all", ...params }, {ttl: CONFIG.cacheTTL.live, ...options}),
-
-  getFixtures: (params = {}, options = {}) =>
-    request("fixtures", params, {ttl: CONFIG.cacheTTL.fixtures, ...options}),
-
-  getMatchDetails: (fixture, options = {}) =>
-    request("fixtures", { id: fixture }, {ttl: CONFIG.cacheTTL.fixtures, ...options}),
-
-  getMatchEvents: (fixture, options = {}) =>
-    request("fixtures/events", { fixture }, {ttl: CONFIG.cacheTTL.events, ...options}),
-
-  getLineups: (fixture, options = {}) =>
-    request("fixtures/lineups", { fixture }, {ttl: CONFIG.cacheTTL.events, ...options}),
-
-  getMatchStatistics: (fixture, options = {}) =>
-    request("fixtures/statistics", { fixture }, {ttl: CONFIG.cacheTTL.statistics, ...options}),
-
-  getStandings: (league, season, options = {}) =>
-    request("standings", { league, season }, {ttl: CONFIG.cacheTTL.standings, ...options}),
-
-  getLeagues: (params = {}, options = {}) =>
-    request("leagues", params, {ttl: CONFIG.cacheTTL.leagues, ...options}),
-
-  getTeams: (params = {}, options = {}) =>
-    request("teams", params, {ttl: CONFIG.cacheTTL.teams, ...options}),
-
-  getPlayers: (params = {}, options = {}) =>
-    request("players", params, {ttl: CONFIG.cacheTTL.players, ...options}),
-
-  getHeadToHead: (h2h, options = {}) =>
-    request("fixtures/headtohead", { h2h }, {ttl: CONFIG.cacheTTL.fixtures, ...options}),
-
-  getPredictions: (fixture, options = {}) =>
-    request("predictions", { fixture }, {ttl: CONFIG.cacheTTL.predictions, ...options}),
-
-  searchLeagues: (search) => request("leagues", { search }, {ttl: CONFIG.cacheTTL.leagues}),
-  searchTeams: (search) => request("teams", { search }, {ttl: CONFIG.cacheTTL.teams}),
-  searchPlayers: (search, page = 1) => request("players", { search, page }, {ttl: CONFIG.cacheTTL.players})
+export const api={
+  getLiveMatches:(p={},o={})=>request("fixtures",{live:"all",...p},{ttl:CONFIG.cacheTTL.live,...o}),
+  getFixtures:(p={},o={})=>request("fixtures",p,{ttl:CONFIG.cacheTTL.fixtures,...o}),
+  getMatchDetails:(fixture,o={})=>request("fixtures",{id:fixture},{ttl:CONFIG.cacheTTL.fixtures,...o}),
+  getMatchEvents:(fixture,o={})=>request("fixtures/events",{fixture},{ttl:CONFIG.cacheTTL.events,...o}),
+  getLineups:(fixture,o={})=>request("fixtures/lineups",{fixture},{ttl:CONFIG.cacheTTL.events,...o}),
+  getMatchStatistics:(fixture,o={})=>request("fixtures/statistics",{fixture},{ttl:CONFIG.cacheTTL.statistics,...o}),
+  getStandings:(league,season,o={})=>request("standings",{league,season},{ttl:CONFIG.cacheTTL.standings,...o}),
+  getLeagues:(p={},o={})=>request("leagues",p,{ttl:CONFIG.cacheTTL.leagues,...o}),
+  getTeams:(p={},o={})=>request("teams",p,{ttl:CONFIG.cacheTTL.teams,...o}),
+  getPlayers:(p={},o={})=>request("players",p,{ttl:CONFIG.cacheTTL.players,...o}),
+  getHeadToHead:(h2h,o={})=>request("fixtures/headtohead",{h2h},{ttl:CONFIG.cacheTTL.fixtures,...o}),
+  getPredictions:(fixture,o={})=>request("predictions",{fixture},{ttl:CONFIG.cacheTTL.predictions,...o}),
+  searchLeagues:s=>request("leagues",{search:s},{ttl:CONFIG.cacheTTL.leagues}),
+  searchTeams:s=>request("teams",{search:s},{ttl:CONFIG.cacheTTL.teams}),
+  searchPlayers:(s,page=1)=>request("players",{search:s,page},{ttl:CONFIG.cacheTTL.players})
 };
 
-export { CONFIG };
+export {CONFIG};
