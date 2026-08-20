@@ -49,7 +49,13 @@ function render(){
   document.title=state.lang==="ar"?"كورة بلس | نتائج ومباريات كرة القدم":"Kora Plus | Football Scores";
   const rows=visible();
   const featured=rows[0];
+  const todayActive = state.date === localDate();
   main.innerHTML=`
+    <div class="date-nav-top" aria-label="${t("todayBtn")}">
+      <button class="date-nav-btn" data-action="prev">${t("previous")}</button>
+      <button class="date-nav-btn ${todayActive ? "active" : ""}" data-action="today">${t("todayBtn")}</button>
+      <button class="date-nav-btn" data-action="next">${t("next")}</button>
+    </div>
     <section class="hero" id="home">
       <div class="hero-grid">
         <div>
@@ -76,15 +82,7 @@ function render(){
     ${importantCards(rows)}
     <div class="section" id="matches">
       <div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length} ${t("matches")}</span></div>
-      <div class="date-switcher" role="group" aria-label="${state.lang==="ar"?"اختيار التاريخ":"Date selector"}">
-        <button class="date-btn ${state.date===shiftDate(localDate(),-1)?"active":""}" data-action="prev">${t("previous")}</button>
-        <button class="date-btn ${state.date===localDate()?"active":""}" data-action="today">${t("todayBtn")}</button>
-        <button class="date-btn ${state.date===shiftDate(localDate(),1)?"active":""}" data-action="next">${t("next")}</button>
-      </div>
-      <div class="toolbar match-tools">
-        <input class="input search-input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}">
-        <select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select>
-      </div>
+      <div class="toolbar"><input class="input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}"><select class="select" id="filter"><option value="all">${t("all")}</option><option value="live">${t("live")}</option><option value="scheduled">${t("scheduled")}</option><option value="finished">${t("finished")}</option></select></div>
       ${state.error&&!state.matches.length?`<div class="card">${esc(state.error)} <button class="input" data-action="refresh">${t("retry")}</button></div>`:""}
       ${state.loading&&!state.matches.length?`<div class="card">${t("loading")}</div>`:""}
       ${!state.loading&&!state.error&&!rows.length?`<div class="card">${state.query?t("noSearch"):t("empty")}</div>`:""}
