@@ -265,9 +265,9 @@ function render(){
 
   main.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>{
     const a=b.dataset.action;
-    if(a==="prev"||a==="next"){state.date=shiftDate(state.date,a==="next"?1:-1);state.matches=[];state.error="";load()}
-    else if(a==="today"){state.date=localDate();state.matches=[];state.error="";load()}
-    else load({force:true});
+    if(a==="prev"||a==="next"){state.date=shiftDate(state.date,a==="next"?1:-1);state.matches=[];state.error="";load().then(queueNextRefresh)}
+    else if(a==="today"){state.date=localDate();state.matches=[];state.error="";load().then(queueNextRefresh)}
+    else load({force:true}).then(queueNextRefresh);
   });
   main.querySelectorAll("[data-scroll]").forEach(a=>a.addEventListener("click",e=>{
     e.preventDefault();
@@ -321,6 +321,27 @@ setActiveRoute("home");
 
 if(!localStorage.getItem("theme"))localStorage.setItem("theme","dark");
 window.addEventListener("online",()=>load({force:true}));
-load();
-/* Refresh every 30 minutes to stay within free API limits. */
-setInterval(()=>{if(state.date===localDate())load()},1800000);
+
+/* Adaptive live-score polling: fast while a live match is on screen,
+   moderate while viewing today (a match could kick off soon), slow for
+   other days, and paused while the tab is hidden to save API quota. */
+let refreshTimer=null;
+function nextRefreshDelay(){
+  const hasLive=state.matches.some(m=>typeOf(m?.status?.short)==="live");
+  const isToday=state.date===localDate();
+  if(hasLive)return 45000;
+  if(isToday)return 180000;
+  return 900000;
+}
+function queueNextRefresh(){
+  clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(async()=>{
+    if(document.visibilityState==="visible")await load({force:true});
+    queueNextRefresh();
+  },nextRefreshDelay());
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible")load({force:true});
+});
+
+load().then(queueNextRefresh);
