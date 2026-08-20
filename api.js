@@ -1,5 +1,5 @@
 /* Free-plan friendly API client. Uses the Cloudflare Worker only. */
-const CONFIG=Object.freeze({proxyBase:"/api",timezone:"Africa/Cairo",cacheTTL:{fixtures:60000,live:45000,events:1800000,statistics:21600000,standings:86400000,leagues:604800000,teams:604800000,players:604800000},staleMaxAge:{fixtures:172800000,live:600000,events:86400000,statistics:21600000,standings:604800000,leagues:2592000000,teams:2592000000,players:2592000000}});
+const CONFIG=Object.freeze({proxyBase:"/api",timezone:"Africa/Cairo",cacheTTL:{fixtures:90000,live:90000,events:1800000,statistics:21600000,standings:86400000,leagues:604800000,teams:604800000,players:604800000},staleMaxAge:{fixtures:172800000,live:600000,events:86400000,statistics:21600000,standings:604800000,leagues:2592000000,teams:2592000000,players:2592000000}});
 const memory=new Map(),inflight=new Map();
 function keyFor(path,params={}){const q=new URLSearchParams();Object.keys(params).sort().forEach(k=>{const v=params[k];if(v!==undefined&&v!==null&&v!=="")q.set(k,String(v))});return `${path}?${q}`}
 function read(key){try{const r=JSON.parse(localStorage.getItem(`kp:${key}`)||"null");return r?.data&&r.time?r:null}catch{return null}}

@@ -266,6 +266,17 @@ img{max-width:100%;}
 .btn.ghost{background:var(--surface-2); color:var(--text); border:1px solid var(--line);}
 .btn.ghost:hover{border-color:var(--primary); color:var(--primary);}
 
+.stale-banner{
+  display:flex; align-items:center; gap:11px; background:color-mix(in srgb,var(--warning) 12%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--warning) 35%,var(--line)); border-radius:var(--radius-md);
+  padding:11px 14px; margin-bottom:14px;
+}
+.stale-banner>span{font-size:18px; color:var(--warning); flex:none;}
+.stale-text{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+.stale-text b{font-size:12.5px; font-weight:800;}
+.stale-text small{color:var(--muted); font-size:11px;}
+.stale-banner .btn{margin-top:0; padding:8px 14px; font-size:12px; flex:none;}
+
 .toast{
   position:fixed; bottom:calc(var(--bottomnav-h) + 14px); left:50%; transform:translateX(-50%) translateY(20px);
   opacity:0; pointer-events:none; z-index:100; background:#101828; color:#fff;

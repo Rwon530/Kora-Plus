@@ -1,7 +1,7 @@
 /* Kora Plus - free API edition (UI layer — data layer untouched) */
-const DICT={ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",standings:"الترتيب",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات والمباريات.",today:"مباريات اليوم",important:"أهم المباريات",importantSub:"مختارة بعناية",importantLeagues:"البطولات المهمة",live:"مباشر",notStarted:"لم تبدأ",finished:"انتهت",postponed:"مؤجلة",all:"الكل",loading:"جاري تحميل المباريات...",emptyTitle:"لا توجد مباريات في هذا اليوم",emptyDesc:"جرّب اختيار يوم آخر أو العودة إلى اليوم الحالي.",emptySearch:"لا توجد نتائج مطابقة لبحثك.",errorTitle:"تعذر تحميل المباريات",errorDesc:"حدثت مشكلة في الاتصال بالخادم. حاول مرة أخرى.",retry:"إعادة المحاولة",goToday:"الذهاب إلى اليوم",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",cached:"بيانات محفوظة مؤقتاً",venue:"الملعب"},en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",standings:"Standings",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Fixtures, live scores, major leagues and important matches.",today:"Today's Matches",important:"Important Matches",importantSub:"Selected matches",importantLeagues:"Top Leagues",live:"Live",notStarted:"Not started",finished:"Finished",postponed:"Postponed",all:"All",loading:"Loading matches...",emptyTitle:"No matches on this day",emptyDesc:"Try another day or jump back to today.",emptySearch:"No results match your search.",errorTitle:"Couldn't load matches",errorDesc:"There was a connection problem. Please try again.",retry:"Retry",goToday:"Go to today",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",cached:"Cached data",venue:"Venue"}};
+const DICT={ar:{brand:"كورة بلس",home:"الرئيسية",matches:"المباريات",leagues:"البطولات",standings:"الترتيب",search:"بحث",heroEyebrow:"منصة كرة القدم",heroTitle:"كل المباريات في مكان واحد",heroDesc:"نتائج المباريات والتحديثات المباشرة وأهم البطولات والمباريات.",today:"مباريات اليوم",important:"أهم المباريات",importantSub:"مختارة بعناية",importantLeagues:"البطولات المهمة",live:"مباشر",notStarted:"لم تبدأ",finished:"انتهت",postponed:"مؤجلة",all:"الكل",loading:"جاري تحميل المباريات...",emptyTitle:"لا توجد مباريات في هذا اليوم",emptyDesc:"جرّب اختيار يوم آخر أو العودة إلى اليوم الحالي.",emptySearch:"لا توجد نتائج مطابقة لبحثك.",errorTitle:"تعذر تحميل المباريات",errorDesc:"حدثت مشكلة في الاتصال بالخادم. حاول مرة أخرى.",retry:"إعادة المحاولة",goToday:"الذهاب إلى اليوم",previous:"السابق",next:"التالي",todayBtn:"اليوم",searchPlaceholder:"ابحث عن فريق أو بطولة...",cached:"بيانات محفوظة مؤقتاً",venue:"الملعب",lastUpdated:"آخر تحديث",staleWarning:"تعذر تحديث النتائج الآن — البيانات المعروضة ليست حديثة",retryNow:"تحديث الآن"},en:{brand:"Kora Plus",home:"Home",matches:"Matches",leagues:"Leagues",standings:"Standings",search:"Search",heroEyebrow:"FOOTBALL PLATFORM",heroTitle:"All matches in one place",heroDesc:"Fixtures, live scores, major leagues and important matches.",today:"Today's Matches",important:"Important Matches",importantSub:"Selected matches",importantLeagues:"Top Leagues",live:"Live",notStarted:"Not started",finished:"Finished",postponed:"Postponed",all:"All",loading:"Loading matches...",emptyTitle:"No matches on this day",emptyDesc:"Try another day or jump back to today.",emptySearch:"No results match your search.",errorTitle:"Couldn't load matches",errorDesc:"There was a connection problem. Please try again.",retry:"Retry",goToday:"Go to today",previous:"Previous",next:"Next",todayBtn:"Today",searchPlaceholder:"Search team or league...",cached:"Cached data",venue:"Venue",lastUpdated:"Last updated",staleWarning:"Couldn't refresh results — showing older data",retryNow:"Refresh now"}};
 const TOP=new Set([2,3,848,39,40,140,141,135,136,78,79,61,62,88,94,203,307,233,1,4,9,32]);
-const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false};
+const state={lang:localStorage.getItem("lang")||"ar",date:localDate(),filter:"all",query:"",matches:[],loading:false,error:"",usingCache:false,lastUpdated:0,stale:false};
 const t=k=>(DICT[state.lang]||DICT.ar)[k]||k;
 
 function localDate(d=new Date()){const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);const g=x=>p.find(v=>v.type===x)?.value;return `${g("year")}-${g("month")}-${g("day")}`}
@@ -31,26 +31,30 @@ function statusLabel(m){
 
 function normalizeMatch(raw={}){const fixture=raw.fixture||{};const teams=raw.teams||{};const league=raw.league||{};const goals=raw.goals||{};return {...raw,id:raw.id??fixture.id,date:raw.date??fixture.date,status:(raw.status??fixture.status??{}),home:raw.home??teams.home??{},away:raw.away??teams.away??{},goals,league,venue:raw.venue??fixture.venue,referee:raw.referee??fixture.referee};}
 function key(date){return `kora-free-fixtures:${date}`}
-function cached(date){try{const x=JSON.parse(localStorage.getItem(key(date))||"null");return Array.isArray(x?.data)?x.data.map(normalizeMatch):null}catch{return null}}
+function cached(date){try{const x=JSON.parse(localStorage.getItem(key(date))||"null");return x&&Array.isArray(x.data)?{data:x.data.map(normalizeMatch),time:x.time||0}:null}catch{return null}}
 function save(date,data){try{localStorage.setItem(key(date),JSON.stringify({time:Date.now(),data}))}catch{}}
 let apiPromise;
 function api(){return apiPromise||(apiPromise=import("./api.js").then(m=>m.api))}
+let consecutiveFailures=0;
 
 async function load({force=false}={}){
   if(state.loading)return;
   state.loading=true;state.error="";
   const old=cached(state.date);
-  if(old?.length&&!state.matches.length){state.matches=old;state.usingCache=true}
+  if(old?.data?.length&&!state.matches.length){state.matches=old.data;state.usingCache=true;state.lastUpdated=old.time}
   render();
   try{
     const client=await api();
     const data=await client.getFixtures({date:state.date},{force});
     const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];
     const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);
-    if(rows.length){state.matches=rows;state.usingCache=false;save(state.date,rows)}
-    else if(!state.matches.length){state.matches=[]}
+    if(rows.length){state.matches=rows;state.usingCache=false;state.stale=false;state.lastUpdated=Date.now();save(state.date,rows);consecutiveFailures=0}
+    else if(!state.matches.length){state.matches=[];state.stale=false;consecutiveFailures=0}
+    else{state.stale=false;consecutiveFailures=0} /* upstream returned an empty list for a day we already have — keep current data */
   }catch(e){
+    consecutiveFailures++;
     if(!state.matches.length)state.error=e?.message||t("errorTitle");
+    else state.stale=true; /* fetch failed but we have something to show — flag it instead of pretending it's fresh */
   }finally{
     state.loading=false;render();
   }
@@ -188,8 +192,17 @@ function todaySection(rows){
     body=stateCard({icon:"⚽",title:t("emptyTitle"),desc:state.query?t("emptySearch"):t("emptyDesc"),actionLabel:t("goToday"),action:"today",ghost:true});
   }
   const filters=[["all",t("all")],["live",t("live")],["scheduled",t("notStarted")],["finished",t("finished")]];
+  const staleBanner=state.stale&&hasAnyData?`<div class="stale-banner">
+      <span>⚠</span>
+      <div class="stale-text">
+        <b>${t("staleWarning")}</b>
+        ${state.lastUpdated?`<small>${t("lastUpdated")}: ${timeLabel(state.lastUpdated)}</small>`:""}
+      </div>
+      <button class="btn ghost" data-action="refresh">${t("retryNow")}</button>
+    </div>`:"";
   return `<div class="section" id="matches">
     <div class="section-head"><div><small>${t("today")}</small><h2>${t("matches")} — ${esc(dateLabel(state.date))}</h2></div><span class="link">${state.matches.length}</span></div>
+    ${staleBanner}
     <div class="search-row">
       <span class="search-icon">⌕</span>
       <input class="input search-input" id="searchInput" value="${esc(state.query)}" placeholder="${t("searchPlaceholder")}">
@@ -322,16 +335,19 @@ setActiveRoute("home");
 if(!localStorage.getItem("theme"))localStorage.setItem("theme","dark");
 window.addEventListener("online",()=>load({force:true}));
 
-/* Adaptive live-score polling: fast while a live match is on screen,
-   moderate while viewing today (a match could kick off soon), slow for
-   other days, and paused while the tab is hidden to save API quota. */
+/* Adaptive live-score polling, aligned with the Worker's cache window so
+   polling faster than that would just re-read the same cached response:
+   fast-ish while a live match is on screen, moderate while viewing today,
+   slow for other days, paused while the tab is hidden. On repeated
+   failures (e.g. upstream rate-limit) the delay backs off automatically
+   instead of hammering a struggling API. */
 let refreshTimer=null;
 function nextRefreshDelay(){
   const hasLive=state.matches.some(m=>typeOf(m?.status?.short)==="live");
   const isToday=state.date===localDate();
-  if(hasLive)return 45000;
-  if(isToday)return 180000;
-  return 900000;
+  let base=hasLive?90000:isToday?300000:900000;
+  if(consecutiveFailures>0)base=Math.min(base*Math.pow(2,Math.min(consecutiveFailures,4)),1800000);
+  return base;
 }
 function queueNextRefresh(){
   clearTimeout(refreshTimer);
@@ -341,7 +357,7 @@ function queueNextRefresh(){
   },nextRefreshDelay());
 }
 document.addEventListener("visibilitychange",()=>{
-  if(document.visibilityState==="visible")load({force:true});
+  if(document.visibilityState==="visible")load({force:true}).then(queueNextRefresh);
 });
 
 load().then(queueNextRefresh);

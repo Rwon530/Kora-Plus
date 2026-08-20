@@ -2,7 +2,7 @@ const API_ORIGIN="https://v3.football.api-sports.io";
 const ALLOWED_ORIGIN="*";
 const PUBLIC_PATHS=new Set(["fixtures","fixtures/events","fixtures/lineups","fixtures/statistics","fixtures/headtohead","standings","leagues","teams","players"]);
 const CACHE_TTL={fixtures:1800,"fixtures/events":1800,"fixtures/statistics":21600,"fixtures/lineups":21600,"fixtures/headtohead":86400,standings:86400,leagues:604800,teams:604800,players:604800};
-const LIVE_TTL=60; /* short cache for today's fixtures / live=all so scores update quickly */
+const LIVE_TTL=300; /* 5-minute cache for today's fixtures / live=all — fresh enough to feel live, safe for free-tier quotas */
 function cairoToday(){const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const g=x=>p.find(v=>v.type===x)?.value;return `${g("year")}-${g("month")}-${g("day")}`}
 function cors(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Methods":"GET, OPTIONS","Access-Control-Allow-Headers":"Content-Type, Accept"}}
 function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",...cors(),...extra}})}
