@@ -381,4 +381,4 @@ loadMatches();
 // Gentle auto-refresh for live matches on today's view.
 setInterval(() => {
   if (state.date === localDate()) loadMatches();
-}, 60000);
+}, 1800000);

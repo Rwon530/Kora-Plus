@@ -1,28 +1,20 @@
 const API_ORIGIN="https://v3.football.api-sports.io";
 const ALLOWED_ORIGIN="*";
 const PUBLIC_PATHS=new Set(["fixtures","fixtures/events","fixtures/lineups","fixtures/statistics","fixtures/headtohead","predictions","standings","leagues","teams","players"]);
-const CACHE_TTL={fixtures:15,"fixtures/events":15,"fixtures/statistics":60,"fixtures/lineups":300,"fixtures/headtohead":3600,predictions:3600,standings:3600,leagues:86400,teams:86400,players:86400};
+const CACHE_TTL={fixtures:1800,"fixtures/events":1800,"fixtures/statistics":21600,"fixtures/lineups":21600,"fixtures/headtohead":86400,predictions:21600,standings:86400,leagues:604800,teams:604800,players:604800};
 
 function cors(){return {"Access-Control-Allow-Origin":ALLOWED_ORIGIN,"Access-Control-Allow-Methods":"GET, OPTIONS","Access-Control-Allow-Headers":"Content-Type, Accept"};}
 function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",...cors(),...extra}});}
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
 async function upstream(target,env){
-  let last;
-  for(let i=0;i<3;i++){
-    try{
-      const r=await fetch(target,{headers:{"x-apisports-key":env.FOOTBALL_API_KEY,"Accept":"application/json"}});
-      const body=await r.text();
-      if(r.ok)return {r,body};
-      last={r,body};
-      if(i<2 && [408,429,500,502,503,504].includes(r.status)){await wait(600*(i+1));continue;}
-      break;
-    }catch(e){
-      last={error:e};
-      if(i<2){await wait(600*(i+1));continue;}
-    }
+  try{
+    const r=await fetch(target,{headers:{"x-apisports-key":env.FOOTBALL_API_KEY,"Accept":"application/json"}});
+    const body=await r.text();
+    return {r,body};
+  }catch(error){
+    return {error};
   }
-  return last;
 }
 
 async function proxy(request,env,ctx){

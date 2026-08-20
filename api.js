@@ -1,7 +1,7 @@
 const CONFIG = Object.freeze({
   proxyBase: "/api",
   defaultTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Cairo",
-  cacheTTL: {fixtures:30000, live:15000, events:15000, statistics:60000, standings:3600000, leagues:86400000, teams:86400000, players:86400000, predictions:3600000},
+  cacheTTL: {fixtures:1800000, live:1800000, events:1800000, statistics:21600000, standings:86400000, leagues:604800000, teams:604800000, players:604800000, predictions:21600000},
   staleMaxAge: {fixtures:86400000, live:600000, events:1800000, statistics:21600000, standings:604800000, leagues:2592000000, teams:2592000000, players:2592000000, predictions:172800000}
 });
 
@@ -45,23 +45,15 @@ function stale(path,key) {
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 async function fetchRetry(url) {
-  let last;
-  for(let i=0;i<3;i++){
-    try{
-      const res=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store"});
-      let body=null; try{body=await res.json();}catch{}
-      if(res.ok && !body?.error) return body;
-      const e=new Error(body?.error||`HTTP ${res.status}`); e.status=res.status; e.apiErrors=body?.errors;
-      last=e;
-      if(i<2 && [408,429,500,502,503,504].includes(res.status)){await sleep(700*(i+1));continue;}
-      throw e;
-    }catch(e){
-      last=e;
-      if(i<2 && !e.status){await sleep(700*(i+1));continue;}
-      throw e;
-    }
+  try {
+    const res=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store"});
+    let body=null; try{body=await res.json();}catch{}
+    if(res.ok && !body?.error) return body;
+    const e=new Error(body?.error||`HTTP ${res.status}`); e.status=res.status; e.apiErrors=body?.errors;
+    throw e;
+  } catch(e) {
+    throw e;
   }
-  throw last||new Error("Request failed");
 }
 
 async function request(path,params={},options={}) {
