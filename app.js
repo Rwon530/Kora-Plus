@@ -14,15 +14,27 @@ function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt
 const LIVE_CODES=["1H","2H","ET","BT","P","LIVE","HT","INT","SUSP"];
 const FINISHED_CODES=["FT","AET","PEN"];
 const POSTPONED_CODES=["PST","CANC","ABD","AWD","WO"];
+const MAX_PLAUSIBLE_LIVE_MS=150*60000; /* 2.5h — a match still "live" past this is almost certainly stuck data upstream, not a real live state */
 function typeOf(s){
   if(LIVE_CODES.includes(s))return"live";
   if(FINISHED_CODES.includes(s))return"finished";
   if(POSTPONED_CODES.includes(s))return"postponed";
   return"scheduled";
 }
+/* Same as typeOf, but distrusts an impossibly long-running "live" status
+   (a known data-quality issue on lower-tier/reserve competitions where the
+   provider never pushes a final full-time update). Use this everywhere a
+   match's live/finished state drives UI or polling decisions. */
+function matchType(m){
+  const type=typeOf(m?.status?.short);
+  if(type==="live"&&m?.date){
+    const kickoff=new Date(m.date).getTime();
+    if(!Number.isNaN(kickoff)&&Date.now()-kickoff>MAX_PLAUSIBLE_LIVE_MS)return"finished";
+  }
+  return type;
+}
 function statusLabel(m){
-  const short=m?.status?.short;
-  const type=typeOf(short);
+  const type=matchType(m);
   if(type==="live")return `${m?.status?.elapsed?m.status.elapsed+"'":t("live")}`;
   if(type==="finished")return t("finished");
   if(type==="postponed")return t("postponed");
@@ -47,7 +59,26 @@ async function load({force=false}={}){
     const client=await api();
     const data=await client.getFixtures({date:state.date},{force});
     const rawRows=Array.isArray(data?.response)?data.response:Array.isArray(data?.results)?data.results:[];
-    const rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);
+    let rows=rawRows.map(normalizeMatch).filter(m=>m.id||m.home?.name||m.away?.name);
+
+    /* The daily "fixtures?date=" list isn't always refreshed in-play on every
+       plan. The dedicated "fixtures?live=all" endpoint is what actually
+       carries real-time status/score, so overlay it onto today's matches —
+       this is the fix for matches that are genuinely live but still show
+       as "not started" on screen. Best-effort: if it fails, keep the
+       schedule data we already have rather than losing the whole page. */
+    if(state.date===localDate()){
+      try{
+        const liveData=await client.getLiveMatches({},{force});
+        const liveRows=(Array.isArray(liveData?.response)?liveData.response:Array.isArray(liveData?.results)?liveData.results:[]).map(normalizeMatch);
+        const liveById=new Map(liveRows.filter(m=>m.id!=null).map(m=>[m.id,m]));
+        if(liveById.size)rows=rows.map(m=>{
+          const live=m.id!=null?liveById.get(m.id):null;
+          return live?{...m,status:live.status,goals:live.goals,score:live.score??m.score}:m;
+        });
+      }catch{/* live overlay is best-effort */}
+    }
+
     if(rows.length){state.matches=rows;state.usingCache=false;state.stale=false;state.lastUpdated=Date.now();save(state.date,rows);consecutiveFailures=0}
     else if(!state.matches.length){state.matches=[];state.stale=false;consecutiveFailures=0}
     else{state.stale=false;consecutiveFailures=0} /* upstream returned an empty list for a day we already have — keep current data */
@@ -63,7 +94,7 @@ async function load({force=false}={}){
 function visible(){
   const q=state.query.trim().toLowerCase();
   return state.matches.filter(m=>{
-    const typ=typeOf(m?.status?.short);
+    const typ=matchType(m);
     const text=[m?.home?.name,m?.away?.name,m?.league?.name,m?.league?.country].join(" ").toLowerCase();
     return(state.filter==="all"||typ===state.filter)&&(!q||text.includes(q));
   });
@@ -73,7 +104,7 @@ function visible(){
 function statusClass(type){return type==="live"?"live":type==="finished"?"done":type==="postponed"?"postponed":""}
 
 function matchCard(m){
-  const home=m?.home||{},away=m?.away||{},typ=typeOf(m?.status?.short);
+  const home=m?.home||{},away=m?.away||{},typ=matchType(m);
   const gh=m?.goals?.home,ga=m?.goals?.away;
   const hasScore=!(gh==null&&ga==null);
   const score=hasScore?`${gh??0} - ${ga??0}`:"";
@@ -121,10 +152,10 @@ function stateCard({icon,title,desc,actionLabel,action,ghost}){
 
 function importantRows(rows){
   return [...rows]
-    .filter(m=>TOP.has(m?.league?.id) || typeOf(m?.status?.short)==="live")
+    .filter(m=>TOP.has(m?.league?.id) || matchType(m)==="live")
     .sort((a,b)=>{
-      const liveA=typeOf(a?.status?.short)==="live"?0:1;
-      const liveB=typeOf(b?.status?.short)==="live"?0:1;
+      const liveA=matchType(a)==="live"?0:1;
+      const liveB=matchType(b)==="live"?0:1;
       if(liveA!==liveB)return liveA-liveB;
       const topA=TOP.has(a?.league?.id)?0:1;
       const topB=TOP.has(b?.league?.id)?0:1;
@@ -343,7 +374,7 @@ window.addEventListener("online",()=>load({force:true}));
    instead of hammering a struggling API. */
 let refreshTimer=null;
 function nextRefreshDelay(){
-  const hasLive=state.matches.some(m=>typeOf(m?.status?.short)==="live");
+  const hasLive=state.matches.some(m=>matchType(m)==="live");
   const isToday=state.date===localDate();
   let base=hasLive?90000:isToday?300000:900000;
   if(consecutiveFailures>0)base=Math.min(base*Math.pow(2,Math.min(consecutiveFailures,4)),1800000);
